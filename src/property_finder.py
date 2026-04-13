@@ -10,7 +10,7 @@ import requests
 import json
 import time
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
 import logging
 from dotenv import load_dotenv
@@ -70,29 +70,46 @@ class RealtyInUSAPI:
             "type": property_types,
             "beds": {"max": max_beds, "min": min_beds},
             "status": ["for_sale"],
-            "sold_price": {"max": max_price, "min": min_price},
+            "list_price": {"max": max_price, "min": min_price},
             "sort": {
                 "direction": "desc",
                 "field": "list_date"
             }
         }
         
-        try:
-            self.logger.info(f"Searching {city}, {state_code} for properties ${min_price:,}-${max_price:,}")
-            response = requests.post(url, headers=self.headers, json=payload, timeout=15)
-            
-            if response.status_code == 200:
-                data = response.json()
-                properties = self._extract_properties_from_response(data)
-                self.logger.info(f"Found {len(properties)} properties in {city}")
-                return properties
-            else:
-                self.logger.error(f"API Error {response.status_code}: {response.text}")
+        self.logger.info(f"Searching {city}, {state_code} for properties ${min_price:,}-${max_price:,}")
+
+        max_retries = 2
+        for attempt in range(max_retries + 1):
+            try:
+                response = requests.post(url, headers=self.headers, json=payload, timeout=15)
+
+                if response.status_code == 200:
+                    data = response.json()
+                    properties = self._extract_properties_from_response(data)
+                    self.logger.info(f"Found {len(properties)} properties in {city}")
+                    return properties
+                elif response.status_code in (429, 500, 502, 503, 504) and attempt < max_retries:
+                    wait = 2 ** attempt
+                    self.logger.warning(f"API returned {response.status_code}, retrying in {wait}s...")
+                    time.sleep(wait)
+                    continue
+                else:
+                    self.logger.error(f"API Error {response.status_code}: {response.text}")
+                    return []
+
+            except requests.exceptions.Timeout:
+                if attempt < max_retries:
+                    self.logger.warning(f"Request timed out, retrying ({attempt + 1}/{max_retries})...")
+                    time.sleep(2 ** attempt)
+                    continue
+                self.logger.error("Request timed out after all retries")
                 return []
-                
-        except Exception as e:
-            self.logger.error(f"Error searching properties: {e}")
-            return []
+            except Exception as e:
+                self.logger.error(f"Error searching properties: {e}")
+                return []
+
+        return []
     
     def _extract_properties_from_response(self, data: dict) -> List[Dict]:
         """Extract and format property data from API response"""
@@ -228,7 +245,7 @@ class RealtyInUSAPI:
                 'source': 'realtor_com_api',
                 'listing_url': listing_url,
                 'date_found': datetime.now().isoformat(),
-                'raw_data': str(prop)[:500],  # For debugging
+                'raw_data': json.dumps(prop, default=str)[:1000],  # For debugging
                 # Additional useful fields
                 'lot_sqft': lot_sqft,
                 'latitude': latitude,
@@ -352,43 +369,37 @@ class RealtyInUSAPI:
             for tag in tags:
                 search_text += ' ' + tag.lower()
         
-        # Known resorts from research - expanded with common patterns
+        # Known resorts - use multi-word keys to avoid false positives
         resorts = {
             'windsor hills': 'Windsor Hills Resort',
-            'windsor': 'Windsor Hills Resort',
-            'terra verde': 'Terra Verde Resort', 
-            'terra': 'Terra Verde Resort',
+            'terra verde': 'Terra Verde Resort',
             'storey lake': 'Storey Lake',
-            'storey': 'Storey Lake',
             'solterra': 'Solterra Resort',
             'vista cay': 'Vista Cay Resort',
-            'vista': 'Vista Cay Resort',
             'celebration': 'Celebration',
-            'reunion': 'Reunion Resort',
+            'reunion resort': 'Reunion Resort',
             'orange lake': 'Orange Lake Resort',
-            'encore': 'Encore Resort',
+            'encore resort': 'Encore Resort',
             'paradise palms': 'Paradise Palms Resort',
             'champions gate': 'ChampionsGate Resort',
+            'championsgate': 'ChampionsGate Resort',
             'regal palms': 'Regal Palms Resort',
             'bahama bay': 'Bahama Bay Resort',
             'westgate': 'Westgate Resort',
-            'magician': 'Magicians Resort',
-            'indian ridge': 'Indian Ridge',
             'emerald island': 'Emerald Island Resort',
             'terracotta': 'Terracotta Resort',
             'lake berkley': 'Lake Berkley Resort',
             'rolling hills': 'Rolling Hills',
             'greater groves': 'Greater Groves',
             'kingdom ridge': 'Kingdom Ridge',
-            'palm resort': 'Palm Resort',
             'four corners': 'Four Corners',
             'west haven': 'West Haven Resort',
             'vacation village': 'Vacation Village Resort',
         }
-        
-        # Check all text for resort mentions
+
+        # Check all text for resort mentions using word boundaries
         for resort_key, resort_name in resorts.items():
-            if resort_key in search_text:
+            if re.search(r'\b' + re.escape(resort_key) + r'\b', search_text):
                 return resort_name
                 
         return "Unknown Resort"
@@ -471,11 +482,11 @@ class RealtyInUSAPI:
         if list_date_str:
             try:
                 list_date = datetime.fromisoformat(list_date_str.replace('Z', '+00:00'))
-                days_on_market = (datetime.now() - list_date.replace(tzinfo=None)).days
+                days_on_market = (datetime.now(timezone.utc) - list_date.astimezone(timezone.utc)).days
                 if days_on_market > 90:  # Been listed > 3 months
                     flags_found.append("long_listing_period")
-            except:
-                pass
+            except (ValueError, TypeError) as e:
+                self.logger.warning(f"Could not parse list_date '{list_date_str}': {e}")
         
         # Check price reductions (could indicate issues)
         if flags.get('is_price_reduced'):
@@ -536,9 +547,22 @@ class EnhancedPropertyDiscoveryAgent:
             
             time.sleep(0.5)  # Be respectful to API
         
+        # Deduplicate properties across cities
+        seen_ids = set()
+        unique_properties = []
+        for prop in all_properties:
+            pid = prop.get('id')
+            if pid and pid in seen_ids:
+                continue
+            if pid:
+                seen_ids.add(pid)
+            unique_properties.append(prop)
+
+        self.logger.info(f"Deduplicated: {len(all_properties)} → {len(unique_properties)} properties")
+
         # Process and score all properties
         processed_properties = []
-        for prop in all_properties:
+        for prop in unique_properties:
             processed_prop = self._process_property_for_str_investment(prop)
             if processed_prop:
                 processed_properties.append(processed_prop)
@@ -582,23 +606,32 @@ class EnhancedPropertyDiscoveryAgent:
             return None
     
     def _calculate_str_score(self, prop: dict) -> float:
-        """Calculate STR investment score based on available data"""
+        """Calculate STR investment score based on available data.
+
+        Weights (max points sum to 10.0):
+          Price: 2.5, Type: 1.5, Bedrooms: 2.0, Bathrooms: 1.0,
+          Sqft: 1.0, Location: 1.0, Resort: 0.5, New listing: 0.2,
+          Virtual tours: 0.2, Photos: 0.1
+        """
         score = 0.0
-        max_score = 10.0
-        
-        # 1. Price score (25%)
+
+        # 1. Price score (max 2.5)
         price = prop.get('price', self.max_price)
-        price_ratio = (self.max_price - price) / (self.max_price - self.min_price)
+        price_range = self.max_price - self.min_price
+        if price_range > 0:
+            price_ratio = max(0.0, min(1.0, (self.max_price - price) / price_range))
+        else:
+            price_ratio = 0.5
         score += price_ratio * 2.5
-        
-        # 2. Property type score (15%)
+
+        # 2. Property type score (max 1.5)
         property_type = prop.get('property_type', '').lower()
         if property_type == 'townhouse':
             score += 1.5
         elif property_type == 'condo':
             score += 1.0
-        
-        # 3. Bedroom score (20%)
+
+        # 3. Bedroom score (max 2.0)
         bedrooms = prop.get('bedrooms', 1)
         if bedrooms >= 3:
             score += 2.0
@@ -606,8 +639,8 @@ class EnhancedPropertyDiscoveryAgent:
             score += 1.5
         elif bedrooms == 1:
             score += 0.5
-        
-        # 4. Bathroom score (10%)
+
+        # 4. Bathroom score (max 1.0)
         bathrooms = prop.get('bathrooms', 1.0)
         if bathrooms >= 2.5:
             score += 1.0
@@ -615,46 +648,44 @@ class EnhancedPropertyDiscoveryAgent:
             score += 0.7
         elif bathrooms >= 1.5:
             score += 0.4
-        
-        # 5. Square footage score (10%)
+
+        # 5. Square footage score (max 1.0)
         sqft = prop.get('square_feet', 0)
         if sqft > 0 and 800 <= sqft <= 2000:
             score += 1.0
         elif sqft > 0:
             score += 0.5
-        
-        # 6. Location score (10%)
+
+        # 6. Location score (max 1.0)
         address = prop.get('address', '').lower()
         for area in self.target_areas:
             if area.lower() in address:
                 score += 1.0
                 break
-        
-        # 7. Resort detection bonus (10%)
+
+        # 7. Resort detection bonus (max 0.5)
         resort_name = prop.get('resort_name', '')
         if resort_name and resort_name != "Unknown Resort":
-            score += 1.0
-        
-        # 8. New listing bonus (5%)
-        if prop.get('is_new_listing'):
             score += 0.5
-        
-        # 9. Virtual tour/Matterport bonus (5%)
-        if prop.get('virtual_tours_count', 0) > 0:
+
+        # 8. New listing bonus (max 0.2)
+        if prop.get('is_new_listing'):
             score += 0.2
+
+        # 9. Virtual tour/Matterport bonus (max 0.2)
+        if prop.get('virtual_tours_count', 0) > 0:
+            score += 0.1
         if prop.get('has_matterport'):
-            score += 0.3
-        
-        # 10. Photo count bonus (5%)
+            score += 0.1
+
+        # 10. Photo count bonus (max 0.1)
         photo_count = prop.get('photo_count', 0)
         if photo_count >= 20:
-            score += 0.5
-        elif photo_count >= 10:
-            score += 0.3
-        elif photo_count >= 5:
             score += 0.1
-        
-        return min(score, max_score)
+        elif photo_count >= 10:
+            score += 0.05
+
+        return score
     
     def get_top_str_properties(self, limit: int = 10) -> List[Dict]:
         """Get top N properties by STR investment score"""
@@ -664,7 +695,7 @@ class EnhancedPropertyDiscoveryAgent:
     def _estimate_nightly_rate(self, prop: dict) -> float:
         """Estimate nightly rate based on property characteristics"""
         base_rate = 100
-        bedroom_multiplier = 1 + (prop['bedrooms'] - 1) * 0.2
+        bedroom_multiplier = 1 + (prop.get('bedrooms', 1) - 1) * 0.2
         type_multiplier = {'Townhouse': 1.2, 'Condo': 1.0}.get(prop.get('property_type', ''), 1.0)
         sqft = prop.get('square_feet', 1000)
         size_factor = min(max(sqft / 1000, 0.7), 1.8)
