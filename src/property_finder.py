@@ -16,6 +16,8 @@ import logging
 from dotenv import load_dotenv
 import os
 
+from property_enricher import PropertyEnricher, calculate_adjusted_score
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -152,10 +154,12 @@ class RealtyInUSAPI:
                 return None
             
             # Location info
-            location = prop.get('location', {})
+            location = prop.get('location') or {}
             if not isinstance(location, dict):
                 location = {}
-            address_info = location.get('address', {})
+            address_info = location.get('address') or {}
+            if not isinstance(address_info, dict):
+                address_info = {}
             
             address_line = address_info.get('line', '')
             city = address_info.get('city', '')
@@ -167,17 +171,19 @@ class RealtyInUSAPI:
             full_address = ", ".join([part for part in address_parts if part])
             
             # Description/info - extract from description object
-            description_obj = prop.get('description', {})
+            description_obj = prop.get('description') or {}
             if not isinstance(description_obj, dict):
                 description_obj = {}
             beds = description_obj.get('beds')
             baths_full = description_obj.get('baths_full', 0)
             baths_half = description_obj.get('baths_half', 0)
-            baths_total = baths_full + (baths_half * 0.5) if baths_half else baths_full
+            baths_full = baths_full or 0
+            baths_half = baths_half or 0
+            baths_total = baths_full + (baths_half * 0.5)
             sqft = description_obj.get('sqft')
             lot_sqft = description_obj.get('lot_sqft')
-            property_type_raw = description_obj.get('type', '')
-            sub_type = description_obj.get('sub_type', '')
+            property_type_raw = description_obj.get('type') or ''
+            sub_type = description_obj.get('sub_type') or ''
             
             # Validate required fields - be lenient, skip only if critical data missing
             if not price or not full_address:
@@ -200,7 +206,7 @@ class RealtyInUSAPI:
             listing_url = prop.get('href', '')
             
             # Get coordinates if available
-            coordinate = location.get('coordinate', {}) if location else {}
+            coordinate = location.get('coordinate') or {}
             latitude = coordinate.get('lat')
             longitude = coordinate.get('lon')
             
@@ -262,7 +268,7 @@ class RealtyInUSAPI:
             return formatted_property
             
         except Exception as e:
-            self.logger.error(f"Error formatting property: {e}")
+            self.logger.error(f"Error formatting property: {e}", exc_info=True)
             return None
     
     def _map_property_type(self, type_raw: str, sub_type: str) -> str:
@@ -322,7 +328,7 @@ class RealtyInUSAPI:
             parts.append("Price reduced")
             
         # Add estimate if available
-        estimate = prop.get('estimate', {}).get('estimate')
+        estimate = (prop.get('estimate') or {}).get('estimate')
         if estimate:
             parts.append(f"Estimated value: ${estimate:,}")
             
@@ -343,8 +349,8 @@ class RealtyInUSAPI:
     
     def _identify_resort_from_address(self, address: str, city: str, prop: dict = None) -> str:
         """Identify if property is in a known resort"""
-        address_lower = address.lower()
-        city_lower = city.lower()
+        address_lower = (address or '').lower()
+        city_lower = (city or '').lower()
         
         # Build a combined search text from all available fields
         search_text = address_lower
@@ -501,9 +507,10 @@ class EnhancedPropertyDiscoveryAgent:
     Configuration loaded securely from .env file
     """
     
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, enrich: bool = True):
         # Initialize API handler (will load key from .env)
         self.api_handler = RealtyInUSAPI(api_key)
+        self.enricher = PropertyEnricher(api_key) if enrich else None
         self.logger = logging.getLogger(__name__)
         self.discovered_properties = []
         
@@ -567,13 +574,32 @@ class EnhancedPropertyDiscoveryAgent:
             if processed_prop:
                 processed_properties.append(processed_prop)
         
-        # Sort by investment score
-        self.discovered_properties = sorted(
-            processed_properties, 
-            key=lambda x: x.get('investment_score', 0), 
+        # Sort by initial score to pick top candidates for enrichment
+        processed_properties.sort(
+            key=lambda x: x.get('investment_score', 0),
             reverse=True
         )
-        
+
+        # Enrich top candidates with detail data (HOA, tax, year built, etc.)
+        enrich_limit = int(os.getenv('ENRICH_LIMIT', 10))
+        if self.enricher:
+            self.logger.info(f"Enriching top {enrich_limit} properties with detail data...")
+            processed_properties = self.enricher.enrich_properties(
+                processed_properties, limit=enrich_limit
+            )
+            # Re-score enriched properties
+            for prop in processed_properties:
+                if prop.get('enriched'):
+                    base_score = prop.get('investment_score', 0)
+                    prop['investment_score'] = calculate_adjusted_score(prop, base_score)
+
+        # Final sort after re-scoring
+        self.discovered_properties = sorted(
+            processed_properties,
+            key=lambda x: x.get('investment_score', 0),
+            reverse=True
+        )
+
         self.logger.info(f"Discovered {len(self.discovered_properties)} STR-qualified properties")
         return self.discovered_properties
     
@@ -740,11 +766,37 @@ class EnhancedPropertyDiscoveryAgent:
             print(f"   🏷️  Type: {prop['property_type']}")
             print(f"   🏨 Resort: {prop.get('resort_name', 'Unknown')}")
             
+            if prop.get('year_built'):
+                print(f"   📅 Year Built: {prop['year_built']}")
+
             if prop.get('is_new_listing'):
                 print(f"   🆕 NEW LISTING")
             if prop.get('is_price_reduced'):
                 print(f"   💰 PRICE REDUCED")
-                
+
+            # Enriched data
+            if prop.get('enriched'):
+                hoa = prop.get('hoa_fee_monthly')
+                if hoa is not None:
+                    includes = prop.get('hoa_includes', [])
+                    inc_str = f" (includes: {', '.join(includes)})" if includes else ""
+                    print(f"   🏢 HOA: ${hoa:,.0f}/mo{inc_str}")
+                else:
+                    print(f"   🏢 HOA: Not listed")
+
+                tax = prop.get('annual_tax')
+                if tax is not None:
+                    print(f"   🏛️  Tax: ${tax:,.0f}/yr (${tax/12:,.0f}/mo)")
+
+                if prop.get('pool'):
+                    print(f"   🏊 Pool: Yes")
+                if prop.get('flood_risk'):
+                    print(f"   🌊 Flood Risk: {prop['flood_risk']}")
+
+                negatives = prop.get('negative_flags', [])
+                if negatives:
+                    print(f"   ⚠️  Flags: {', '.join(negatives)}")
+
             amenities = []
             if prop.get('has_matterport'):
                 amenities.append("Matterport 3D Tour")
@@ -770,13 +822,20 @@ class EnhancedPropertyDiscoveryAgent:
                 monthly_mortgage = loan_amount / (30 * 12)
             monthly_mortgage_estimate = monthly_mortgage
             
+            # Fixed monthly costs
+            hoa_monthly = prop.get('hoa_fee_monthly') or 0
+            tax_monthly = (prop.get('annual_tax') or 0) / 12
+
             print(f"   💵 Est. Nightly Rate: ${estimated_nightly}")
             print(f"   💰 Est. Monthly Gross: ${estimated_monthly_gross:,.0f} (70% occ)")
             print(f"   💰 Est. Monthly Net: ${estimated_monthly_net:,.0f} (after 35% expenses)")
             print(f"   🏦 Est. Monthly Mortgage: ${monthly_mortgage_estimate:,.0f} ({down_payment_pct:.0f}% down, {interest_rate}% rate, 30yr)")
-            cash_flow = estimated_monthly_net - monthly_mortgage_estimate
+            if hoa_monthly > 0 or tax_monthly > 0:
+                print(f"   🏢 Monthly HOA: ${hoa_monthly:,.0f} | 🏛️  Monthly Tax: ${tax_monthly:,.0f}")
+            total_fixed = monthly_mortgage_estimate + hoa_monthly + tax_monthly
+            cash_flow = estimated_monthly_net - total_fixed
             cash_flow_color = '🟢' if cash_flow > 0 else '🔴'
-            print(f"   {cash_flow_color} Est. Monthly Cash Flow: ${cash_flow:,.0f}")
+            print(f"   {cash_flow_color} Est. Monthly Cash Flow: ${cash_flow:,.0f} (after mortgage + HOA + tax)")
             
             print(f"   🔗 Source: {prop['source']}")
             print(f"   🌐 {prop.get('listing_url', 'URL available in full data')}")
