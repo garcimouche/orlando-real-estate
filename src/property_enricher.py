@@ -30,14 +30,13 @@ class PropertyEnricher:
         if not self.api_key:
             raise ValueError("REALTY_API_KEY not found in environment.")
 
-        # The v2/detail endpoint on realty-in-us is broken (returns 204).
-        # Default to the US Real Estate API which has a working v3 detail endpoint.
+        # The v2/detail endpoint returns 204. The v3/detail on the same host works.
         # Override via DETAIL_API_HOST / DETAIL_API_ENDPOINT in .env if needed.
         self.detail_host = os.getenv(
-            'DETAIL_API_HOST', 'us-real-estate.p.rapidapi.com'
+            'DETAIL_API_HOST', 'realty-in-us.p.rapidapi.com'
         )
         self.detail_endpoint = os.getenv(
-            'DETAIL_API_ENDPOINT', '/v3/property-detail'
+            'DETAIL_API_ENDPOINT', '/properties/v3/detail'
         )
         self.base_url = f"https://{self.detail_host}"
         self.headers = {
