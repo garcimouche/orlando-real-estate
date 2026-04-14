@@ -46,8 +46,51 @@ class PropertyEnricher:
         }
         self.logger = logging.getLogger(__name__)
 
-        # Cache to avoid re-fetching the same property
-        self._cache: Dict[str, Dict] = {}
+        # Persistent cache: stored as JSON on disk, loaded at init
+        cache_dir = os.path.join(os.path.dirname(__file__), '..', 'cache')
+        os.makedirs(cache_dir, exist_ok=True)
+        self._cache_path = os.path.join(cache_dir, 'property_details.json')
+        self._cache_ttl_days = int(os.getenv('DETAIL_CACHE_TTL_DAYS', 7))
+        self._cache: Dict[str, Dict] = self._load_cache()
+
+    # ------------------------------------------------------------------
+    # Persistent cache
+    # ------------------------------------------------------------------
+
+    def _load_cache(self) -> Dict[str, Dict]:
+        """Load cache from disk, discarding entries older than TTL."""
+        if not os.path.exists(self._cache_path):
+            return {}
+        try:
+            with open(self._cache_path, 'r') as f:
+                raw = json.load(f)
+            # Expire stale entries
+            now = datetime.now(timezone.utc)
+            valid = {}
+            for pid, entry in raw.items():
+                cached_at = entry.get('_cached_at')
+                if cached_at:
+                    age = (now - datetime.fromisoformat(cached_at)).days
+                    if age > self._cache_ttl_days:
+                        continue
+                valid[pid] = entry
+            if len(valid) < len(raw):
+                self.logger.info(
+                    f"Cache: kept {len(valid)}/{len(raw)} entries "
+                    f"(expired {len(raw) - len(valid)} older than {self._cache_ttl_days} days)"
+                )
+            return valid
+        except (json.JSONDecodeError, OSError) as e:
+            self.logger.warning(f"Could not load cache, starting fresh: {e}")
+            return {}
+
+    def _save_cache(self):
+        """Persist current cache to disk."""
+        try:
+            with open(self._cache_path, 'w') as f:
+                json.dump(self._cache, f, default=str)
+        except OSError as e:
+            self.logger.warning(f"Could not save cache: {e}")
 
     # ------------------------------------------------------------------
     # Public API
@@ -87,6 +130,9 @@ class PropertyEnricher:
             if i < len(to_enrich) - 1:
                 time.sleep(delay)
 
+        # Persist cache to disk after enrichment round
+        self._save_cache()
+
         # Append any remaining properties that were not enriched
         enriched.extend(properties[limit:])
         return enriched
@@ -113,6 +159,7 @@ class PropertyEnricher:
 
                 if response.status_code == 200:
                     data = response.json()
+                    data['_cached_at'] = datetime.now(timezone.utc).isoformat()
                     self._cache[property_id] = data
                     return data
                 elif response.status_code in (429, 500, 502, 503, 504) and attempt < max_retries:

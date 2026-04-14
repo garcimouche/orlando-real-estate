@@ -13,6 +13,9 @@ build/
 .venv/
 venv/
 
+# Cache
+cache/
+
 # macOS
 .DS_Store
 
