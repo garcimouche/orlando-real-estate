@@ -341,7 +341,7 @@ class RealtyInUSAPI:
             parts.append("Matterport 3D tour available")
             
         # Add photo count
-        photo_count = prop.get('photo_count', 0)
+        photo_count = prop.get('photo_count') or 0
         if photo_count > 0:
             parts.append(f"{photo_count} photos")
             
