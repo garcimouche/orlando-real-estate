@@ -523,7 +523,11 @@ class EnhancedPropertyDiscoveryAgent:
         self.min_price = int(os.getenv('MIN_PRICE', 150000))
         self.property_types = ['condo', 'townhouse']
         self.min_bedrooms = int(os.getenv('MIN_BEDROOMS', 1))
-        
+
+        # STR signal filter: only consider properties with STR/investor hints
+        # Set REQUIRE_STR_SIGNALS=false in .env to disable
+        self.require_str_signals = os.getenv('REQUIRE_STR_SIGNALS', 'true').lower() == 'true'
+
         # Target areas from Franck's research
         self.target_areas = [
             'Kissimmee', 'Davenport', 'Celebration', 'Orlando',
@@ -569,10 +573,18 @@ class EnhancedPropertyDiscoveryAgent:
 
         # Process and score all properties
         processed_properties = []
+        filtered_no_str = 0
         for prop in unique_properties:
             processed_prop = self._process_property_for_str_investment(prop)
             if processed_prop:
                 processed_properties.append(processed_prop)
+            elif self.require_str_signals and not self._has_str_signals(prop):
+                filtered_no_str += 1
+
+        if self.require_str_signals and filtered_no_str > 0:
+            self.logger.info(
+                f"STR filter: {filtered_no_str} properties rejected (no STR signals)"
+            )
         
         # Sort by initial score to pick top candidates for enrichment
         processed_properties.sort(
@@ -587,11 +599,31 @@ class EnhancedPropertyDiscoveryAgent:
             processed_properties = self.enricher.enrich_properties(
                 processed_properties, limit=enrich_limit
             )
-            # Re-score enriched properties
+            # Re-score enriched properties and disqualify anti-STR ones
+            anti_str_flags = [
+                'no airbnb', 'no vrbo', 'no vacation rental',
+                'no short term', 'hoa prohibits', 'hoa does not allow',
+                'hoa restricts', 'primary residence only', 'owner occupied only',
+                'no investors', 'annual lease required',
+            ]
+            surviving = []
             for prop in processed_properties:
                 if prop.get('enriched'):
+                    negatives = prop.get('negative_flags', [])
+                    disqualified = any(
+                        any(anti in neg for anti in anti_str_flags)
+                        for neg in negatives
+                    )
+                    if disqualified:
+                        self.logger.info(
+                            f"DISQUALIFIED (anti-STR): {prop.get('address')} "
+                            f"— flags: {negatives}"
+                        )
+                        continue
                     base_score = prop.get('investment_score', 0)
                     prop['investment_score'] = calculate_adjusted_score(prop, base_score)
+                surviving.append(prop)
+            processed_properties = surviving
 
         # Final sort after re-scoring
         self.discovered_properties = sorted(
@@ -603,30 +635,53 @@ class EnhancedPropertyDiscoveryAgent:
         self.logger.info(f"Discovered {len(self.discovered_properties)} STR-qualified properties")
         return self.discovered_properties
     
+    def _has_str_signals(self, prop: dict) -> bool:
+        """Check if a property has any STR/investor-friendly signals.
+
+        A property passes if it has at least one of:
+        - STR keyword found in listing data (tags, description, flags)
+        - Located in a known resort community
+        """
+        # Check STR keywords
+        str_keywords = prop.get('str_keywords_found', [])
+        if str_keywords:
+            return True
+
+        # Check known resort
+        resort = prop.get('resort_name', '')
+        if resort and resort != 'Unknown Resort':
+            return True
+
+        return False
+
     def _process_property_for_str_investment(self, prop: dict) -> Optional[Dict]:
         """Process a property to determine its STR investment potential"""
         try:
             price = prop.get('price', 0)
             if price < self.min_price or price > self.max_price:
                 return None
-                
+
             bedrooms = prop.get('bedrooms', 0)
             if bedrooms < self.min_bedrooms:
                 return None
-                
+
             property_type = prop.get('property_type', '').lower()
             if property_type not in [pt.lower() for pt in self.property_types]:
                 return None
-            
+
+            # STR signal gate: reject properties with no STR/investor hints
+            if self.require_str_signals and not self._has_str_signals(prop):
+                return None
+
             investment_score = self._calculate_str_score(prop)
-            
+
             if investment_score >= 3.0:
                 prop['investment_score'] = round(investment_score, 1)
                 prop['score_timestamp'] = datetime.now().isoformat()
                 return prop
             else:
                 return None
-                
+
         except Exception as e:
             self.logger.warning(f"Error processing property: {e}")
             return None
@@ -766,6 +821,17 @@ class EnhancedPropertyDiscoveryAgent:
             print(f"   🏷️  Type: {prop['property_type']}")
             print(f"   🏨 Resort: {prop.get('resort_name', 'Unknown')}")
             
+            # Show why this property qualified as STR-friendly
+            str_kw = prop.get('str_keywords_found', [])
+            resort = prop.get('resort_name', '')
+            signals = []
+            if resort and resort != 'Unknown Resort':
+                signals.append(f"Resort: {resort}")
+            if str_kw:
+                signals.append(f"Keywords: {', '.join(str_kw[:5])}")
+            if signals:
+                print(f"   ✅ STR Signals: {' | '.join(signals)}")
+
             if prop.get('year_built'):
                 print(f"   📅 Year Built: {prop['year_built']}")
 
