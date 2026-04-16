@@ -39,17 +39,19 @@ class RealtyInUSAPI:
         }
         self.logger = logging.getLogger(__name__)
     
-    def search_properties(self, city: str, state_code: str = "FL", 
+    def search_properties(self, city: str = None, state_code: str = "FL",
+                         postal_code: str = None,
                          min_price: int = None, max_price: int = None,
                          min_beds: int = None, max_beds: int = None,
                          property_types: List[str] = None,
                          limit: int = 20) -> List[Dict]:
         """
-        Search for properties using the working endpoint you discovered
-        
-        Returns list of property dictionaries in the format expected by enhanced agent
+        Search for properties using the working endpoint you discovered.
+
+        Accepts either city+state_code or postal_code as location filter.
+        Returns list of property dictionaries in the format expected by enhanced agent.
         """
-        
+
         # Load defaults from environment if not specified
         if min_price is None:
             min_price = int(os.getenv('MIN_PRICE', 150000))
@@ -61,13 +63,11 @@ class RealtyInUSAPI:
             max_beds = int(os.getenv('MAX_BEDROOMS', 5))
         if property_types is None:
             property_types = ["apartment", "condo_townhome", "condo_townhome_rowhome_coop"]
-        
+
         url = f"{self.base_url}{self.endpoint}"
-        
+
         payload = {
             "limit": limit,
-            "city": city,
-            "state_code": state_code,
             "offset": 0,
             "type": property_types,
             "beds": {"max": max_beds, "min": min_beds},
@@ -78,8 +78,17 @@ class RealtyInUSAPI:
                 "field": "list_date"
             }
         }
-        
-        self.logger.info(f"Searching {city}, {state_code} for properties ${min_price:,}-${max_price:,}")
+
+        # Use postal_code or city+state as location filter
+        if postal_code:
+            payload["postal_code"] = postal_code
+            location_label = f"zip {postal_code}"
+        else:
+            payload["city"] = city
+            payload["state_code"] = state_code
+            location_label = f"{city}, {state_code}"
+
+        self.logger.info(f"Searching {location_label} for properties ${min_price:,}-${max_price:,}")
 
         max_retries = 2
         for attempt in range(max_retries + 1):
@@ -89,7 +98,7 @@ class RealtyInUSAPI:
                 if response.status_code == 200:
                     data = response.json()
                     properties = self._extract_properties_from_response(data)
-                    self.logger.info(f"Found {len(properties)} properties in {city}")
+                    self.logger.info(f"Found {len(properties)} properties in {location_label}")
                     return properties
                 elif response.status_code in (429, 500, 502, 503, 504) and attempt < max_retries:
                     wait = 2 ** attempt
@@ -375,12 +384,20 @@ class RealtyInUSAPI:
             for tag in tags:
                 search_text += ' ' + tag.lower()
         
-        # Known resorts - use multi-word keys to avoid false positives
+        # Known STR-friendly resort communities in the Orlando/Kissimmee area.
+        # Multi-word keys with word-boundary matching to avoid false positives.
         resorts = {
+            # Established resort communities
             'windsor hills': 'Windsor Hills Resort',
+            'windsor palms': 'Windsor Palms Resort',
+            'windsor cay': 'Windsor Cay Resort',
+            'windsor island': 'Windsor Island Resort',
+            'windsor at westside': 'Windsor at Westside',
             'terra verde': 'Terra Verde Resort',
             'storey lake': 'Storey Lake',
             'solterra': 'Solterra Resort',
+            'solara resort': 'Solara Resort',
+            'solara': 'Solara Resort',
             'vista cay': 'Vista Cay Resort',
             'celebration': 'Celebration',
             'reunion resort': 'Reunion Resort',
@@ -390,6 +407,7 @@ class RealtyInUSAPI:
             'champions gate': 'ChampionsGate Resort',
             'championsgate': 'ChampionsGate Resort',
             'regal palms': 'Regal Palms Resort',
+            'regal oaks': 'Regal Oaks Resort',
             'bahama bay': 'Bahama Bay Resort',
             'westgate': 'Westgate Resort',
             'emerald island': 'Emerald Island Resort',
@@ -401,6 +419,31 @@ class RealtyInUSAPI:
             'four corners': 'Four Corners',
             'west haven': 'West Haven Resort',
             'vacation village': 'Vacation Village Resort',
+            'aviana resort': 'Aviana Resort',
+            'aviana': 'Aviana Resort',
+            # Vacation home communities
+            'encantada': 'Encantada Resort',
+            'bella vida': 'Bella Vida Resort',
+            'bella piazza': 'Bella Piazza Resort',
+            'highlands reserve': 'Highlands Reserve',
+            'ridgewood lakes': 'Ridgewood Lakes',
+            'indian creek': 'Indian Creek',
+            'tuscan hills': 'Tuscan Hills',
+            'watersong': 'Watersong Resort',
+            'veranda palms': 'Veranda Palms',
+            'calabay parc': 'Calabay Parc',
+            'crystal cove': 'Crystal Cove Resort',
+            'cumbrian lakes': 'Cumbrian Lakes',
+            'hampton lakes': 'Hampton Lakes',
+            'eagle pointe': 'Eagle Pointe',
+            'legacy park': 'Legacy Park',
+            'sunset lakes': 'Sunset Lakes',
+            # Condo-hotel / resort-style
+            'cypress pointe': 'Cypress Pointe Resort',
+            'floridays': 'Floridays Resort',
+            'mystic dunes': 'Mystic Dunes Resort',
+            'liki tiki': 'Liki Tiki Village',
+            'caribe cove': 'Caribe Cove Resort',
         }
 
         # Check all text for resort mentions using word boundaries
@@ -517,6 +560,11 @@ class EnhancedPropertyDiscoveryAgent:
         # Load target cities from environment or use defaults
         cities_env = os.getenv('TARGET_CITIES', 'Kissimmee,Davenport,Celebration,Orlando')
         self.target_cities = [(city.strip(), 'FL') for city in cities_env.split(',')]
+
+        # STR-focused zip codes near Disney for deeper search coverage
+        # These cover the main resort/vacation home corridors
+        zips_env = os.getenv('TARGET_ZIPS', '34746,34747,34741,33896,33897,33837')
+        self.target_zips = [z.strip() for z in zips_env.split(',') if z.strip()]
         
         # Load investment criteria from environment
         self.max_price = int(os.getenv('MAX_PRICE', 415000))
@@ -528,6 +576,12 @@ class EnhancedPropertyDiscoveryAgent:
         # Set REQUIRE_STR_SIGNALS=false in .env to disable
         self.require_str_signals = os.getenv('REQUIRE_STR_SIGNALS', 'true').lower() == 'true'
 
+        # Zip codes known to be STR-friendly resort corridors.
+        # Properties in these zips pass the STR filter automatically
+        # (the enrichment phase will catch anti-STR flags later).
+        str_zips_env = os.getenv('STR_FRIENDLY_ZIPS', '34746,34747,33896,33897')
+        self.str_friendly_zips = set(z.strip() for z in str_zips_env.split(',') if z.strip())
+
         # Target areas from Franck's research
         self.target_areas = [
             'Kissimmee', 'Davenport', 'Celebration', 'Orlando',
@@ -535,38 +589,48 @@ class EnhancedPropertyDiscoveryAgent:
         ]
     
     def search_properties(self) -> List[Dict]:
-        """Main search method - finds properties using REAL API data"""
+        """Main search method - finds properties using REAL API data.
+
+        Searches by zip code for better coverage of resort/vacation
+        communities near Disney, rather than by city name.
+        """
+        search_limit = int(os.getenv('SEARCH_LIMIT_PER_ZIP', 50))
         self.logger.info("Starting REAL PROPERTY search for Orlando STR investments")
-        self.logger.info(f"Targeting {len(self.target_cities)} cities")
-        
+        self.logger.info(f"Targeting {len(self.target_zips)} zip codes, {search_limit} per zip")
+
         all_properties = []
-        
-        # Search each target city
-        for city, state_code in self.target_cities:
-            self.logger.info(f"Searching {city}, {state_code}...")
-            
+
+        # Search each target zip code
+        for zip_code in self.target_zips:
+            self.logger.info(f"Searching zip {zip_code}...")
+
             properties = self.api_handler.search_properties(
-                city=city,
-                state_code=state_code,
+                postal_code=zip_code,
                 min_price=self.min_price,
                 max_price=self.max_price,
-                limit=25
+                limit=search_limit
             )
-            
-            self.logger.info(f"Found {len(properties)} properties in {city}")
+
+            self.logger.info(f"Found {len(properties)} properties in zip {zip_code}")
             all_properties.extend(properties)
-            
+
             time.sleep(0.5)  # Be respectful to API
         
-        # Deduplicate properties across cities
+        # Deduplicate properties across zip codes (by id and address)
         seen_ids = set()
+        seen_addresses = set()
         unique_properties = []
         for prop in all_properties:
             pid = prop.get('id')
+            addr = prop.get('address', '').lower().strip()
             if pid and pid in seen_ids:
+                continue
+            if addr and addr in seen_addresses:
                 continue
             if pid:
                 seen_ids.add(pid)
+            if addr:
+                seen_addresses.add(addr)
             unique_properties.append(prop)
 
         self.logger.info(f"Deduplicated: {len(all_properties)} → {len(unique_properties)} properties")
@@ -641,6 +705,7 @@ class EnhancedPropertyDiscoveryAgent:
         A property passes if it has at least one of:
         - STR keyword found in listing data (tags, description, flags)
         - Located in a known resort community
+        - Located in a zip code known to have STR-friendly communities
         """
         # Check STR keywords
         str_keywords = prop.get('str_keywords_found', [])
@@ -651,6 +716,12 @@ class EnhancedPropertyDiscoveryAgent:
         resort = prop.get('resort_name', '')
         if resort and resort != 'Unknown Resort':
             return True
+
+        # Check if in a STR-friendly zip code
+        address = prop.get('address', '')
+        for zip_code in self.str_friendly_zips:
+            if zip_code in address:
+                return True
 
         return False
 
