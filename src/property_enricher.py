@@ -25,10 +25,16 @@ load_dotenv()
 class PropertyEnricher:
     """Fetches and parses property detail data from the API detail endpoint."""
 
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, local_mode: bool = False):
         self.api_key = api_key or os.getenv('DETAIL_API_KEY') or os.getenv('REALTY_API_KEY')
         if not self.api_key:
             raise ValueError("REALTY_API_KEY not found in environment.")
+
+        # When local_mode=True, no API calls are made — only cached data is used.
+        self.local_mode = local_mode
+
+        # Counts actual HTTP calls made (cache hits excluded).
+        self.api_call_count = 0
 
         # The v2/detail endpoint returns 204. The v3/detail on the same host works.
         # Override via DETAIL_API_HOST / DETAIL_API_ENDPOINT in .env if needed.
@@ -51,6 +57,9 @@ class PropertyEnricher:
         self._cache_path = os.path.join(cache_dir, 'property_details.json')
         self._cache_ttl_days = int(os.getenv('DETAIL_CACHE_TTL_DAYS', 7))
         self._cache: Dict[str, Dict] = self._load_cache()
+
+        # Remember which IDs were in cache at startup so we can flag new ones.
+        self._initial_cache_keys: set = set(self._cache.keys())
 
     # ------------------------------------------------------------------
     # Persistent cache
@@ -123,6 +132,8 @@ class PropertyEnricher:
             detail = self._fetch_detail(property_id)
             if detail:
                 prop = self._merge_detail(prop, detail)
+            # Mark as new if this property_id wasn't in the cache at startup
+            prop['detail_is_new'] = property_id not in self._initial_cache_keys
             enriched.append(prop)
 
             # Rate-limit between calls
@@ -146,12 +157,18 @@ class PropertyEnricher:
             self.logger.debug(f"Cache hit for {property_id}")
             return self._cache[property_id]
 
+        # In local mode we never hit the API — return None if not cached.
+        if self.local_mode:
+            self.logger.debug(f"Local mode: no cached data for {property_id}, skipping")
+            return None
+
         url = f"{self.base_url}{self.detail_endpoint}"
         params = {"property_id": property_id}
 
         max_retries = 2
         for attempt in range(max_retries + 1):
             try:
+                self.api_call_count += 1
                 response = requests.get(
                     url, headers=self.headers, params=params, timeout=15
                 )

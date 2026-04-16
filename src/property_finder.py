@@ -6,6 +6,7 @@ API key loaded securely from .env file (not hardcoded!)
 Using YOUR discovered endpoint: properties/v3/list
 """
 
+import argparse
 import requests
 import json
 import time
@@ -38,6 +39,8 @@ class RealtyInUSAPI:
             "Content-Type": "application/json"
         }
         self.logger = logging.getLogger(__name__)
+        # Count every HTTP request made (retries included).
+        self.api_call_count = 0
     
     def search_properties(self, city: str = None, state_code: str = "FL",
                          postal_code: str = None,
@@ -93,6 +96,7 @@ class RealtyInUSAPI:
         max_retries = 2
         for attempt in range(max_retries + 1):
             try:
+                self.api_call_count += 1
                 response = requests.post(url, headers=self.headers, json=payload, timeout=15)
 
                 if response.status_code == 200:
@@ -550,12 +554,18 @@ class EnhancedPropertyDiscoveryAgent:
     Configuration loaded securely from .env file
     """
     
-    def __init__(self, api_key: str = None, enrich: bool = True):
+    def __init__(self, api_key: str = None, enrich: bool = True, local_mode: bool = False):
         # Initialize API handler (will load key from .env)
+        self.local_mode = local_mode
         self.api_handler = RealtyInUSAPI(api_key)
-        self.enricher = PropertyEnricher(api_key) if enrich else None
+        self.enricher = PropertyEnricher(api_key, local_mode=local_mode) if enrich else None
         self.logger = logging.getLogger(__name__)
         self.discovered_properties = []
+
+        # List-level cache path (saves raw search results for --local mode)
+        cache_dir = os.path.join(os.path.dirname(__file__), '..', 'cache')
+        os.makedirs(cache_dir, exist_ok=True)
+        self._list_cache_path = os.path.join(cache_dir, 'property_list.json')
         
         # Load target cities from environment or use defaults
         cities_env = os.getenv('TARGET_CITIES', 'Kissimmee,Davenport,Celebration,Orlando')
@@ -589,33 +599,64 @@ class EnhancedPropertyDiscoveryAgent:
         ]
     
     def search_properties(self) -> List[Dict]:
-        """Main search method - finds properties using REAL API data.
+        """Main search method - finds properties using REAL API data (or cache).
 
         Searches by zip code for better coverage of resort/vacation
         communities near Disney, rather than by city name.
-        """
-        search_limit = int(os.getenv('SEARCH_LIMIT_PER_ZIP', 50))
-        self.logger.info("Starting REAL PROPERTY search for Orlando STR investments")
-        self.logger.info(f"Targeting {len(self.target_zips)} zip codes, {search_limit} per zip")
 
+        In --local mode, loads previously cached list results instead of calling
+        the API, allowing offline re-scoring without consuming API quota.
+        """
         all_properties = []
 
-        # Search each target zip code
-        for zip_code in self.target_zips:
-            self.logger.info(f"Searching zip {zip_code}...")
+        if self.local_mode:
+            # Load raw list results from disk cache
+            if os.path.exists(self._list_cache_path):
+                try:
+                    with open(self._list_cache_path, 'r') as f:
+                        all_properties = json.load(f)
+                    self.logger.info(
+                        f"[LOCAL] Loaded {len(all_properties)} properties from list cache"
+                    )
+                except (json.JSONDecodeError, OSError) as e:
+                    self.logger.error(f"Could not load list cache: {e}")
+                    return []
+            else:
+                self.logger.error(
+                    "List cache not found. Run without --local first to populate it."
+                )
+                return []
+        else:
+            search_limit = int(os.getenv('SEARCH_LIMIT_PER_ZIP', 50))
+            self.logger.info("Starting REAL PROPERTY search for Orlando STR investments")
+            self.logger.info(f"Targeting {len(self.target_zips)} zip codes, {search_limit} per zip")
 
-            properties = self.api_handler.search_properties(
-                postal_code=zip_code,
-                min_price=self.min_price,
-                max_price=self.max_price,
-                limit=search_limit
-            )
+            # Search each target zip code
+            for zip_code in self.target_zips:
+                self.logger.info(f"Searching zip {zip_code}...")
 
-            self.logger.info(f"Found {len(properties)} properties in zip {zip_code}")
-            all_properties.extend(properties)
+                properties = self.api_handler.search_properties(
+                    postal_code=zip_code,
+                    min_price=self.min_price,
+                    max_price=self.max_price,
+                    limit=search_limit
+                )
 
-            time.sleep(0.5)  # Be respectful to API
-        
+                self.logger.info(f"Found {len(properties)} properties in zip {zip_code}")
+                all_properties.extend(properties)
+
+                time.sleep(0.5)  # Be respectful to API
+
+            # Persist raw list results so --local mode can use them later
+            try:
+                with open(self._list_cache_path, 'w') as f:
+                    json.dump(all_properties, f, default=str)
+                self.logger.info(
+                    f"Saved {len(all_properties)} raw properties to list cache"
+                )
+            except OSError as e:
+                self.logger.warning(f"Could not save list cache: {e}")
+
         # Deduplicate properties across zip codes (by id and address)
         seen_ids = set()
         seen_addresses = set()
@@ -839,6 +880,13 @@ class EnhancedPropertyDiscoveryAgent:
 
         return score
     
+    @property
+    def total_api_calls(self) -> int:
+        """Total HTTP calls made across list search and detail enrichment."""
+        list_calls = self.api_handler.api_call_count
+        detail_calls = self.enricher.api_call_count if self.enricher else 0
+        return list_calls + detail_calls
+
     def get_top_str_properties(self, limit: int = 10) -> List[Dict]:
         """Get top N properties by STR investment score"""
         return [prop for prop in self.discovered_properties[:limit] 
@@ -885,7 +933,8 @@ class EnhancedPropertyDiscoveryAgent:
         interest_rate = float(os.getenv('INTEREST_RATE', 7.25))
         
         for i, prop in enumerate(top_properties, 1):
-            print(f"🥇 OPPORTUNITY #{i}")
+            new_badge = " ✨ NEW!" if prop.get('detail_is_new') else ""
+            print(f"🥇 OPPORTUNITY #{i}{new_badge}")
             print(f"   📍 {prop['address']}")
             print(f"   💰 Price: ${prop['price']:,}")
             print(f"   🏠 {prop['bedrooms']}BR/{prop['bathrooms']}BA | {prop['square_feet']:,} sqft")
@@ -985,37 +1034,64 @@ class EnhancedPropertyDiscoveryAgent:
         print("   3. Check actual rental comps in each area")
         print("   4. Consider setting up weekly automated scans")
         print("   5. Review property pages via provided URLs for due diligence")
+        mode_label = "[LOCAL — no API calls]" if self.local_mode else ""
+        print(f"\n📡 Total API calls this run: {self.total_api_calls} {mode_label}".rstrip())
         print("=" * 80)
 
-def demo_enhanced_usage():
-    """Demonstrate the enhanced agent with REAL API data"""
+def demo_enhanced_usage(local: bool = False):
+    """Demonstrate the enhanced agent with REAL API data (or local cache)."""
     print("🚀 ENHANCED ORLANDO STR PROPERTY DISCOVERY AGENT")
-    print("   Powered by REAL API Data (Secure Configuration from .env)")
+    if local:
+        print("   Mode: LOCAL (running entirely from cache — no API calls)")
+    else:
+        print("   Powered by REAL API Data (Secure Configuration from .env)")
     print("   (Adapted from Franck's Research Findings)")
     print("=" * 70)
-    
+
     # Initialize agent (will load config from .env)
-    agent = EnhancedPropertyDiscoveryAgent()
-    
+    agent = EnhancedPropertyDiscoveryAgent(local_mode=local)
+
     print("🔧 Agent Configuration (from .env):")
     print(f"   💰 Price Range: ${agent.min_price:,} - ${agent.max_price:,}")
     print(f"   🏠 Property Types: {', '.join(agent.property_types)}")
     print(f"   🛏️  Min Bedrooms: {agent.min_bedrooms}")
-    print(f"   🎯 Target Cities: {len(agent.target_cities)} configured")
+    print(f"   🎯 Target Zips: {', '.join(agent.target_zips)}")
     print()
-    
+
     # Run search
-    print("🔍 SEARCHING FOR REAL PROPERTIES...")
+    if local:
+        print("📂 LOADING PROPERTIES FROM CACHE...")
+    else:
+        print("🔍 SEARCHING FOR REAL PROPERTIES...")
     properties = agent.search_properties()
-    
+
     # Show results
     agent.print_str_opportunities(limit=8)
-    
+
     print("\n" + "=" * 70)
-    print("✅ AGENT READY FOR PRODUCTION USE WITH REAL DATA")
-    print("🔧 Configuration is loaded securely from .env file")
-    print("   (API key and settings are NOT in source code)")
+    if not local:
+        print("✅ AGENT READY FOR PRODUCTION USE WITH REAL DATA")
+        print("🔧 Configuration is loaded securely from .env file")
+        print("   (API key and settings are NOT in source code)")
     print("=" * 70)
 
+
 if __name__ == "__main__":
-    demo_enhanced_usage()
+    parser = argparse.ArgumentParser(
+        description="Orlando STR Property Discovery Agent"
+    )
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Run entirely from cache (no API calls). Requires a previous live run.",
+    )
+    args = parser.parse_args()
+
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+    demo_enhanced_usage(local=args.local)
