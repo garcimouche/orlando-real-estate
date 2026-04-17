@@ -448,6 +448,24 @@ class RealtyInUSAPI:
             'mystic dunes': 'Mystic Dunes Resort',
             'liki tiki': 'Liki Tiki Village',
             'caribe cove': 'Caribe Cove Resort',
+            # Universal / International Drive corridor
+            'point orlando': 'The Point Orlando Resort',
+            'the point orlando': 'The Point Orlando Resort',
+            'international drive': 'I-Drive Corridor',
+            'i-drive': 'I-Drive Corridor',
+            'idrive': 'I-Drive Corridor',
+            'sand lake': 'Sand Lake / Dr. Phillips',
+            'dr phillips': 'Dr. Phillips',
+            'doctor phillips': 'Dr. Phillips',
+            'universal palms': 'Universal Palms Resort',
+            'parkway palms': 'Parkway Palms Resort',
+            'palm pointe': 'Palm Pointe Resort',
+            'williamsburg': 'Williamsburg Condos',
+            'caribe royale': 'Caribe Royale Resort',
+            'sheraton vistana': 'Sheraton Vistana',
+            'vistana': 'Sheraton Vistana',
+            'worldquest': 'WorldQuest Resort',
+            'world quest': 'WorldQuest Resort',
         }
 
         # Check all text for resort mentions using word boundaries
@@ -571,9 +589,15 @@ class EnhancedPropertyDiscoveryAgent:
         cities_env = os.getenv('TARGET_CITIES', 'Kissimmee,Davenport,Celebration,Orlando')
         self.target_cities = [(city.strip(), 'FL') for city in cities_env.split(',')]
 
-        # STR-focused zip codes near Disney for deeper search coverage
-        # These cover the main resort/vacation home corridors
-        zips_env = os.getenv('TARGET_ZIPS', '34746,34747,34741,33896,33897,33837')
+        # STR-focused zip codes covering Disney AND Universal/I-Drive corridors
+        # Disney/Kissimmee: 34746, 34747, 34741, 33896, 33897, 33837
+        # Universal/I-Drive: 32819 (Universal, I-Drive, Dr. Phillips),
+        #                    32821 (Southern I-Drive, SeaWorld),
+        #                    32822 (Williamsburg / near Universal east)
+        zips_env = os.getenv(
+            'TARGET_ZIPS',
+            '34746,34747,34741,33896,33897,33837,32819,32821,32822'
+        )
         self.target_zips = [z.strip() for z in zips_env.split(',') if z.strip()]
         
         # Load investment criteria from environment
@@ -589,13 +613,17 @@ class EnhancedPropertyDiscoveryAgent:
         # Zip codes known to be STR-friendly resort corridors.
         # Properties in these zips pass the STR filter automatically
         # (the enrichment phase will catch anti-STR flags later).
-        str_zips_env = os.getenv('STR_FRIENDLY_ZIPS', '34746,34747,33896,33897')
+        str_zips_env = os.getenv(
+            'STR_FRIENDLY_ZIPS',
+            '34746,34747,33896,33897,32819,32821,32822'
+        )
         self.str_friendly_zips = set(z.strip() for z in str_zips_env.split(',') if z.strip())
 
         # Target areas from Franck's research
         self.target_areas = [
             'Kissimmee', 'Davenport', 'Celebration', 'Orlando',
-            'Lake Buena Vista', 'Four Corners', 'Clermont'
+            'Lake Buena Vista', 'Four Corners', 'Clermont',
+            'International Drive', 'Universal',
         ]
     
     def search_properties(self) -> List[Dict]:
