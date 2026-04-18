@@ -56,6 +56,8 @@ class PropertyEnricher:
         os.makedirs(cache_dir, exist_ok=True)
         self._cache_path = os.path.join(cache_dir, 'property_details.json')
         self._cache_ttl_days = int(os.getenv('DETAIL_CACHE_TTL_DAYS', 7))
+        # Number of days a property stays "NEW!" after first being seen
+        self._new_window_days = int(os.getenv('NEW_BADGE_WINDOW_DAYS', 7))
         self._cache: Dict[str, Dict] = self._load_cache()
 
         # Remember which IDs were in cache at startup so we can flag new ones.
@@ -81,6 +83,9 @@ class PropertyEnricher:
                     age = (now - datetime.fromisoformat(cached_at)).days
                     if age > self._cache_ttl_days:
                         continue
+                # Backfill _first_seen_at for legacy entries (pre-tracking)
+                if not entry.get('_first_seen_at'):
+                    entry['_first_seen_at'] = cached_at or now.isoformat()
                 valid[pid] = entry
             if len(valid) < len(raw):
                 self.logger.info(
@@ -91,6 +96,17 @@ class PropertyEnricher:
         except (json.JSONDecodeError, OSError) as e:
             self.logger.warning(f"Could not load cache, starting fresh: {e}")
             return {}
+
+    def _is_recently_seen(self, first_seen_iso: Optional[str]) -> bool:
+        """True if the property was first seen within the 'NEW!' window."""
+        if not first_seen_iso:
+            return True  # no record → treat as new
+        try:
+            first_seen = datetime.fromisoformat(first_seen_iso)
+            age_days = (datetime.now(timezone.utc) - first_seen).days
+            return age_days <= self._new_window_days
+        except (ValueError, TypeError):
+            return False
 
     def _save_cache(self):
         """Persist current cache to disk."""
@@ -132,8 +148,12 @@ class PropertyEnricher:
             detail = self._fetch_detail(property_id)
             if detail:
                 prop = self._merge_detail(prop, detail)
-            # Mark as new if this property_id wasn't in the cache at startup
-            prop['detail_is_new'] = property_id not in self._initial_cache_keys
+            # Mark as new if first seen within the configured window
+            first_seen = None
+            if property_id in self._cache:
+                first_seen = self._cache[property_id].get('_first_seen_at')
+            prop['first_seen_at'] = first_seen
+            prop['detail_is_new'] = self._is_recently_seen(first_seen)
             enriched.append(prop)
 
             # Rate-limit between calls
@@ -175,7 +195,11 @@ class PropertyEnricher:
 
                 if response.status_code == 200:
                     data = response.json()
-                    data['_cached_at'] = datetime.now(timezone.utc).isoformat()
+                    now_iso = datetime.now(timezone.utc).isoformat()
+                    data['_cached_at'] = now_iso
+                    # Preserve first_seen_at across re-fetches; stamp only once
+                    prior = self._cache.get(property_id) or {}
+                    data['_first_seen_at'] = prior.get('_first_seen_at') or now_iso
                     self._cache[property_id] = data
                     return data
                 elif response.status_code in (429, 500, 502, 503, 504) and attempt < max_retries:

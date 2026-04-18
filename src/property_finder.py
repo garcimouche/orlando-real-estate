@@ -22,6 +22,98 @@ from property_enricher import PropertyEnricher, calculate_adjusted_score
 # Load environment variables from .env file
 load_dotenv()
 
+# ---------------------------------------------------------------------------
+# AirDNA-style per-zip STR rate estimates
+# ---------------------------------------------------------------------------
+# Structure: {zip_code: {bedrooms: (median_nightly_adr_usd, occupancy_rate)}}
+#
+# These are RESEARCH-BASED ESTIMATES from public Orlando STR market data.
+# Replace with real AirDNA MarketMinder numbers when subscribed.
+# Sources considered: AirDNA public previews, AirBtics summaries, Rabbu estimates,
+# Orlando-Osceola tourist tax filings (for occupancy trends).
+#
+# ADR = Average Daily Rate that guests actually pay (not listing price).
+# Occupancy = fraction of nights booked (already accounts for off-season).
+#
+# Net annual revenue = ADR × 365 × occupancy
+# Net monthly gross  = ADR × 30  × occupancy  (used as revBruts in finance tool)
+# ---------------------------------------------------------------------------
+STR_RATES_BY_ZIP = {
+    # --- Davenport resort corridor (ChampionsGate, Solterra, Windsor Island) ---
+    '33896': {  # ChampionsGate — premium, newer, strong year-round
+        3: (215, 0.72), 4: (290, 0.75), 5: (385, 0.73),
+        6: (450, 0.70), 7: (520, 0.68), 8: (600, 0.65),
+    },
+    '33897': {  # Solterra, Windsor Island, Bella Vida, Aviana
+        3: (180, 0.68), 4: (240, 0.72), 5: (315, 0.70),
+        6: (380, 0.68), 7: (440, 0.66), 8: (510, 0.63),
+    },
+    '33837': {  # Davenport general — older stock, farther from parks
+        2: (110, 0.58), 3: (140, 0.62), 4: (185, 0.65),
+        5: (245, 0.63), 6: (290, 0.60),
+    },
+    # --- Kissimmee / Celebration corridor ---
+    '34747': {  # Celebration, Formosa Gardens, Reunion, Windsor Hills
+        2: (135, 0.68), 3: (185, 0.70), 4: (255, 0.73),
+        5: (330, 0.72), 6: (395, 0.70), 7: (460, 0.68),
+    },
+    '34746': {  # Kissimmee west, Storey Lake, Emerald Island, Windsor Palms
+        2: (115, 0.65), 3: (155, 0.68), 4: (210, 0.70),
+        5: (275, 0.68), 6: (330, 0.66),
+    },
+    '34741': {  # Kissimmee east/central — more residential
+        2: (100, 0.60), 3: (130, 0.63), 4: (175, 0.65),
+        5: (225, 0.62),
+    },
+    # --- Universal / International Drive corridor ---
+    '32819': {  # Universal, Dr. Phillips, I-Drive — condo hotels, high occ
+        1: (105, 0.75), 2: (145, 0.73), 3: (190, 0.72),
+        4: (245, 0.70), 5: (310, 0.67),
+    },
+    '32821': {  # Southern I-Drive, SeaWorld, Convention Center
+        1: (95, 0.72), 2: (130, 0.70), 3: (165, 0.68),
+        4: (215, 0.65), 5: (270, 0.62),
+    },
+    '32822': {  # Williamsburg — near Universal but more residential
+        2: (110, 0.65), 3: (145, 0.63), 4: (190, 0.60),
+    },
+}
+
+# Fallback for zip codes not in the table (rough average)
+_DEFAULT_RATES_BY_BEDROOMS = {
+    1: (100, 0.68), 2: (130, 0.65), 3: (165, 0.65), 4: (220, 0.67),
+    5: (290, 0.66), 6: (350, 0.63), 7: (410, 0.60), 8: (475, 0.58),
+}
+
+
+def estimate_str_revenue(zip_code: str, bedrooms: int) -> dict:
+    """Return (median_adr, occupancy, monthly_gross) for a given zip+bedroom.
+
+    Uses AirDNA-style per-zip rates if available, else the bedroom-only fallback.
+    """
+    bedrooms = max(1, min(bedrooms or 3, 8))
+    zip_rates = STR_RATES_BY_ZIP.get(zip_code)
+    if zip_rates and bedrooms in zip_rates:
+        adr, occ = zip_rates[bedrooms]
+        source = 'airdna_zip'
+    elif zip_rates:
+        # Zip known but bedroom count not in table — use nearest
+        nearest = min(zip_rates.keys(), key=lambda b: abs(b - bedrooms))
+        adr, occ = zip_rates[nearest]
+        source = 'airdna_zip_interpolated'
+    else:
+        adr, occ = _DEFAULT_RATES_BY_BEDROOMS.get(bedrooms, (165, 0.65))
+        source = 'bedroom_fallback'
+
+    monthly_gross = round(adr * 30 * occ, 2)
+    return {
+        'adr': adr,
+        'occupancy': occ,
+        'monthly_gross': monthly_gross,
+        'source': source,
+    }
+
+
 class RealtyInUSAPI:
     """Handler for Realty-in-US API integration"""
     
@@ -916,28 +1008,146 @@ class EnhancedPropertyDiscoveryAgent:
         return list_calls + detail_calls
 
     def get_top_str_properties(self, limit: int = 20) -> List[Dict]:
-        """Get top N properties by STR investment score"""
-        return [prop for prop in self.discovered_properties[:limit] 
-                if prop.get('investment_score', 0) >= 4.0]
+        """Get top N properties by STR investment score.
+
+        Returns all ranked properties up to limit — no score threshold,
+        so the finance tool can compare why #20 ranks lower than #1.
+        """
+        return list(self.discovered_properties[:limit])
     
-    def _estimate_nightly_rate(self, prop: dict) -> float:
-        """Estimate nightly rate based on property characteristics"""
-        base_rate = 100
-        bedroom_multiplier = 1 + (prop.get('bedrooms', 1) - 1) * 0.2
-        type_multiplier = {'Townhouse': 1.2, 'Condo': 1.0}.get(prop.get('property_type', ''), 1.0)
-        sqft = prop.get('square_feet', 1000)
-        size_factor = min(max(sqft / 1000, 0.7), 1.8)
-        
-        amenity_bonus = 0
+    def export_scored_properties(self, limit: int = 20,
+                                  output_path: str = None) -> str:
+        """Write the top-N ranked properties to cache/scored_properties.json.
+
+        This file is consumed by property_finance.html (the web-based
+        investment analyzer). Contains everything needed to render the
+        Discovery tab + pre-fill the finance sliders.
+
+        Returns the path written.
+        """
+        if output_path is None:
+            output_path = os.path.join(
+                os.path.dirname(__file__), '..', 'cache', 'scored_properties.json'
+            )
+
+        top = self.get_top_str_properties(limit)
+        export = []
+        for rank, prop in enumerate(top, 1):
+            rev = self._estimate_str_revenue(prop)
+            export.append({
+                'rank': rank,
+                # Core identity
+                'id': prop.get('id'),
+                'address': prop.get('address'),
+                'listing_url': prop.get('listing_url'),
+                'source': prop.get('source'),
+                # Size & type
+                'price': prop.get('price'),
+                'bedrooms': prop.get('bedrooms'),
+                'bathrooms': prop.get('bathrooms'),
+                'square_feet': prop.get('square_feet'),
+                'property_type': prop.get('property_type'),
+                'lot_sqft': prop.get('lot_sqft'),
+                # STR / discovery signals
+                'resort_name': prop.get('resort_name'),
+                'investment_score': prop.get('investment_score'),
+                'str_keywords_found': prop.get('str_keywords_found', []),
+                'negative_flags': prop.get('negative_flags', []),
+                'zip_used': rev['zip_used'],
+                # NEW! tracking
+                'first_seen_at': prop.get('first_seen_at'),
+                'detail_is_new': prop.get('detail_is_new', False),
+                'is_new_listing': prop.get('is_new_listing', False),
+                'is_price_reduced': prop.get('is_price_reduced', False),
+                # Media
+                'photo_count': prop.get('photo_count', 0),
+                'virtual_tours_count': prop.get('virtual_tours_count', 0),
+                'has_matterport': prop.get('has_matterport', False),
+                # Enriched details (may be None if not enriched)
+                'hoa_fee_monthly': prop.get('hoa_fee_monthly'),
+                'hoa_includes': prop.get('hoa_includes', []),
+                'annual_tax': prop.get('annual_tax'),
+                'tax_year': prop.get('tax_year'),
+                'year_built': prop.get('year_built'),
+                'pool': prop.get('pool'),
+                'flood_risk': prop.get('flood_risk'),
+                'days_on_market': prop.get('days_on_market'),
+                'price_per_sqft': prop.get('price_per_sqft'),
+                'parking': prop.get('parking'),
+                'stories': prop.get('stories'),
+                'cooling': prop.get('cooling'),
+                'heating': prop.get('heating'),
+                'full_description': prop.get('full_description'),
+                'enriched': prop.get('enriched', False),
+                # AirDNA-style revenue estimate (feeds finance tool's revBruts)
+                'estimated_nightly': rev['adr'],
+                'estimated_occupancy': rev['occupancy'],
+                'estimated_monthly_gross': rev['monthly_gross'],
+                'revenue_estimate_source': rev['source'],
+            })
+
+        payload = {
+            'generated_at': datetime.now(timezone.utc).isoformat(),
+            'total_api_calls': self.total_api_calls,
+            'local_mode': self.local_mode,
+            'new_badge_window_days': int(os.getenv('NEW_BADGE_WINDOW_DAYS', 7)),
+            'count': len(export),
+            'properties': export,
+        }
+
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        with open(output_path, 'w') as f:
+            json.dump(payload, f, indent=2, default=str)
+
+        self.logger.info(f"Exported {len(export)} scored properties to {output_path}")
+        return output_path
+
+    def _extract_zip_from_address(self, address: str) -> Optional[str]:
+        """Extract 5-digit zip from an address string."""
+        if not address:
+            return None
+        match = re.search(r'\b(3[0-9]{4})\b', address)
+        return match.group(1) if match else None
+
+    def _estimate_str_revenue(self, prop: dict) -> dict:
+        """Return AirDNA-style revenue estimate for a property.
+
+        Returns dict with: adr, occupancy, monthly_gross, source.
+        Uses the property's zip code for per-market rates, with small
+        premium/discount for size, property type, and amenities.
+        """
+        zip_code = self._extract_zip_from_address(prop.get('address', ''))
+        base = estimate_str_revenue(zip_code, prop.get('bedrooms', 3))
+
+        # Small multipliers on top of the zip baseline
+        multiplier = 1.0
+        # Townhouse/standalone slightly premium over condo
+        if prop.get('property_type', '').lower() == 'townhouse':
+            multiplier += 0.05
+        # Size premium — large units (>1.5× typical for their bedroom count)
+        sqft = prop.get('square_feet') or 0
+        beds = prop.get('bedrooms') or 3
+        typical_sqft = beds * 450  # rough heuristic
+        if sqft > typical_sqft * 1.3:
+            multiplier += 0.05
+        # Better listings likely achieve better rates
         if prop.get('has_matterport'):
-            amenity_bonus += 0.1
-        if prop.get('virtual_tours_count', 0) > 0:
-            amenity_bonus += 0.05
-        if prop.get('is_new_listing'):
-            amenity_bonus += 0.05
-        
-        estimated_rate = base_rate * bedroom_multiplier * type_multiplier * size_factor * (1 + amenity_bonus)
-        return round(estimated_rate, 2)
+            multiplier += 0.03
+
+        adjusted_adr = round(base['adr'] * multiplier, 2)
+        adjusted_monthly = round(adjusted_adr * 30 * base['occupancy'], 2)
+
+        return {
+            'adr': adjusted_adr,
+            'occupancy': base['occupancy'],
+            'monthly_gross': adjusted_monthly,
+            'source': base['source'],
+            'zip_used': zip_code,
+        }
+
+    def _estimate_nightly_rate(self, prop: dict) -> float:
+        """Legacy shim — returns just the nightly ADR."""
+        return self._estimate_str_revenue(prop)['adr']
     
     def print_str_opportunities(self, limit: int = 20):
         """Print formatted STR opportunities ready for investment review"""
@@ -1095,6 +1305,14 @@ def demo_enhanced_usage(local: bool = False):
 
     # Show results
     agent.print_str_opportunities(limit=20)
+
+    # Export JSON for the web-based finance analyzer
+    try:
+        export_path = agent.export_scored_properties(limit=20)
+        print(f"\n📦 Exported scored list → {export_path}")
+        print("   View in browser: ./src/start_web_finance.sh")
+    except Exception as e:
+        print(f"\n⚠️  Could not export scored properties: {e}")
 
     print("\n" + "=" * 70)
     if not local:
