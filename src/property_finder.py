@@ -655,7 +655,7 @@ class EnhancedPropertyDiscoveryAgent:
                 )
                 return []
         else:
-            search_limit = int(os.getenv('SEARCH_LIMIT_PER_ZIP', 50))
+            search_limit = int(os.getenv('SEARCH_LIMIT_PER_ZIP', 200))
             self.logger.info("Starting REAL PROPERTY search for Orlando STR investments")
             self.logger.info(f"Targeting {len(self.target_zips)} zip codes, {search_limit} per zip")
 
@@ -726,7 +726,7 @@ class EnhancedPropertyDiscoveryAgent:
         )
 
         # Enrich top candidates with detail data (HOA, tax, year built, etc.)
-        enrich_limit = int(os.getenv('ENRICH_LIMIT', 15))
+        enrich_limit = int(os.getenv('ENRICH_LIMIT', 25))
         if self.enricher:
             self.logger.info(f"Enriching top {enrich_limit} properties with detail data...")
             processed_properties = self.enricher.enrich_properties(
@@ -915,7 +915,7 @@ class EnhancedPropertyDiscoveryAgent:
         detail_calls = self.enricher.api_call_count if self.enricher else 0
         return list_calls + detail_calls
 
-    def get_top_str_properties(self, limit: int = 15) -> List[Dict]:
+    def get_top_str_properties(self, limit: int = 20) -> List[Dict]:
         """Get top N properties by STR investment score"""
         return [prop for prop in self.discovered_properties[:limit] 
                 if prop.get('investment_score', 0) >= 4.0]
@@ -939,7 +939,7 @@ class EnhancedPropertyDiscoveryAgent:
         estimated_rate = base_rate * bedroom_multiplier * type_multiplier * size_factor * (1 + amenity_bonus)
         return round(estimated_rate, 2)
     
-    def print_str_opportunities(self, limit: int = 15):
+    def print_str_opportunities(self, limit: int = 20):
         """Print formatted STR opportunities ready for investment review"""
         print("=" * 80)
         print("🏆 ENHANCED ORLANDO STR PROPERTY DISCOVERY")
@@ -1094,7 +1094,7 @@ def demo_enhanced_usage(local: bool = False):
     properties = agent.search_properties()
 
     # Show results
-    agent.print_str_opportunities(limit=15)
+    agent.print_str_opportunities(limit=20)
 
     print("\n" + "=" * 70)
     if not local:
