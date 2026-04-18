@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orlando STR — Analyse financière</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            background: #060e18;
+            color: #e8f4fd;
+            font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif;
+        }
+        #root {
+            max-width: 560px;
+            margin: 0 auto;
+        }
+        #loading {
+            padding: 40px 20px;
+            text-align: center;
+            color: #607080;
+            font-size: 14px;
+        }
+        code {
+            font-family: "SF Mono", Monaco, monospace;
+        }
+    </style>
+
+    <!-- React 18 + Babel Standalone from CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+    <div id="root"><div id="loading">Chargement de React…</div></div>
+
+    <!-- Load the JSX source as text, strip its module import, transform, and mount. -->
+    <script>
+        // Fetch the JSX source; rewrite the ES6 import into globals.
+        fetch("./property_finance.jsx")
+            .then(r => r.ok ? r.text() : Promise.reject("Could not load property_finance.jsx — make sure you're running via start_web_finance.sh"))
+            .then(src => {
+                // React / hooks come from the UMD build; rewrite the import line.
+                let transformed = src.replace(
+                    /^import\s*\{([^}]+)\}\s*from\s*["']react["'];?\s*$/m,
+                    "const { $1 } = React;"
+                );
+                // Replace `export default function App()` with a plain function that we then render.
+                transformed = transformed.replace(/^export\s+default\s+function\s+App\s*\(/m, "function App(");
+
+                // Compile JSX via Babel Standalone
+                const { code } = Babel.transform(transformed, {
+                    presets: ["react"],
+                    filename: "property_finance.jsx"
+                });
+
+                // Evaluate in a scope that has React available
+                const factory = new Function("React", code + "\nreturn App;");
+                const App = factory(React);
+
+                const root = ReactDOM.createRoot(document.getElementById("root"));
+                root.render(React.createElement(App));
+            })
+            .catch(err => {
+                document.getElementById("root").innerHTML =
+                    "<div style='padding:40px 20px;text-align:center;color:#e07070;font-size:14px;'>" +
+                    "<div style='font-size:18px;margin-bottom:10px;'>⚠️ Erreur de chargement</div>" +
+                    "<div>" + String(err) + "</div>" +
+                    "<div style='margin-top:20px;color:#7090a8;font-size:12px;line-height:1.6;'>" +
+                    "Lance le serveur local :<br>" +
+                    "<code style='background:#0a1624;padding:4px 8px;border-radius:4px;color:#a0b0c0;'>./src/start_web_finance.sh</code>" +
+                    "</div></div>";
+                console.error(err);
+            });
+    </script>
+</body>
+</html>
