@@ -607,8 +607,8 @@ export default function App() {
         <Slider label="Autres frais vente" value={tAutresVente} min={0.5} max={3} step={0.5} onChange={setTAutresVente} formatFn={(v) => v + "%"} />
         <Slider label="Rendement ETF annuel" value={rendementETF} min={4} max={12} step={0.5} onChange={setRendementETF}
           formatFn={(v) => v + "%"} sublabel="Pour le comparatif ETF vs immobilier" />
-        <Slider label="HOA mensuel" value={hoa} min={149} max={600} step={25} onChange={setHoa}
-          formatFn={(v) => fmt(v)} sublabel="Terra Verde officiel: 149$/mois — certaines unites: 300-500$/mois" />
+        <Slider label="HOA mensuel" value={hoa} min={149} max={1200} step={25} onChange={setHoa}
+          formatFn={(v) => fmt(v)} sublabel="Terra Verde officiel: 149$/mois — condos resort haut de gamme peuvent atteindre ~1200$/mois" />
         <Slider label="Impot gain capital US" value={tTaxGain} min={0} max={20} step={5} onChange={setTTaxGain}
           formatFn={(v) => v + "%"} sublabel="0% (petit gain) / 15% (typique) / 20% (gain eleve)" />
       </Card>
