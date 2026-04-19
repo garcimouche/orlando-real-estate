@@ -10,10 +10,12 @@ per-person prices by --pax for display.
 """
 
 import argparse
+import html
 import json
 import logging
 import os
 import sys
+import webbrowser
 from datetime import date, datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
@@ -319,6 +321,10 @@ def parse_args() -> argparse.Namespace:
         help='Replay from cache only -- no API calls. Requires a prior live run.',
     )
     parser.add_argument(
+        '--open', dest='open_html', action='store_true',
+        help='Open the exported HTML page in the default browser after running.',
+    )
+    parser.add_argument(
         '-v', '--verbose', action='store_true',
         help='Enable DEBUG-level logging.',
     )
@@ -407,8 +413,13 @@ def main() -> int:
     )
 
     print_results(unique, args, depart, ret, destination)
-    export_path = export_results(unique, args, depart, ret, destination)
-    print(f"\nExported {len(unique)} offers -> {export_path}")
+    json_path = export_results(unique, args, depart, ret, destination)
+    html_path = export_html(unique, args, depart, ret, destination)
+    print(f"\nExported {len(unique)} offers:")
+    print(f"  JSON : {json_path}")
+    print(f"  HTML : {html_path}")
+    if args.open_html:
+        webbrowser.open(f'file://{os.path.abspath(html_path)}')
     return 0
 
 
@@ -463,11 +474,6 @@ def print_results(offers: List[Dict], args, depart: date, ret: date, destination
         f"Prix: per-person * {args.pax} pax (taxes reelles peuvent varier a la reservation). "
         f"* = transfert auto-gere (vous recuperez/recheckez vos bagages)."
     )
-    print()
-    print("Top 3 liens de reservation:")
-    for i, o in enumerate(offers[:3], 1):
-        if o.get('booking_url'):
-            print(f"  #{i}  {o['booking_url']}")
 
 
 def export_results(offers: List[Dict], args, depart: date, ret: date,
@@ -494,6 +500,101 @@ def export_results(offers: List[Dict], args, depart: date, ret: date,
     path = os.path.join(out_dir, 'latest.json')
     with open(path, 'w') as f:
         json.dump(payload, f, indent=2, default=str)
+    return path
+
+
+def export_html(offers: List[Dict], args, depart: date, ret: date,
+                destination: str) -> str:
+    """Render offers to cache/flights/latest.html -- compact, browsable, clickable."""
+    rows = []
+    for i, o in enumerate(offers, 1):
+        out, inb = o['outbound'], o['inbound']
+        vi_badge = '<span class="vi" title="Transfert auto-gere">VI</span>' if o['virtual_interline'] else ''
+        url = html.escape(o.get('booking_url') or '', quote=True)
+        book = (
+            f'<a class="book" href="{url}" target="_blank" rel="noopener">Reserver</a>'
+            if url else '<span class="nolink">-</span>'
+        )
+        rows.append(
+            '<tr>'
+            f'<td class="num">{i}</td>'
+            f'<td class="orig">{html.escape(o["origin"])}</td>'
+            f'<td class="price">${o["total_cad"]:,.0f}</td>'
+            f'<td class="pers">${o["price_per_person_cad"]:,.0f}</td>'
+            f'<td class="when">{html.escape(out["depart_local"][:10])} <span class="hm">{_fmt_hhmm(out["depart_local"])}</span></td>'
+            f'<td class="when">{html.escape(inb["depart_local"][:10])} <span class="hm">{_fmt_hhmm(inb["depart_local"])}</span></td>'
+            f'<td class="stops">{out["stops"]}/{inb["stops"]}</td>'
+            f'<td class="dur">{_fmt_dur(out["duration_min"])} / {_fmt_dur(inb["duration_min"])}</td>'
+            f'<td class="car">{html.escape("+".join(out["carriers"]))} / {html.escape("+".join(inb["carriers"]))}</td>'
+            f'<td class="flag">{vi_badge}</td>'
+            f'<td class="act">{book}</td>'
+            '</tr>'
+        )
+    origins = ', '.join(o.strip().upper() for o in args.origins.split(',') if o.strip())
+    generated = datetime.now().strftime('%Y-%m-%d %H:%M')
+    title = f'Vols {origins} -> {destination} | {depart} -> {ret}'
+    subtitle = (
+        f'+/-{args.flex}j flex, max {args.max_stops} escale/vol, {args.pax} pax, CAD. '
+        f'{len(offers)} offres. Genere {generated}.'
+    )
+    doc = f"""<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>{html.escape(title)}</title>
+<style>
+  :root {{ color-scheme: light dark; }}
+  body {{ font: 14px/1.4 -apple-system, system-ui, sans-serif; margin: 24px; max-width: 1200px; }}
+  h1 {{ font-size: 18px; margin: 0 0 4px; }}
+  .sub {{ color: #666; font-size: 12px; margin-bottom: 16px; }}
+  table {{ border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }}
+  th, td {{ padding: 6px 10px; text-align: left; border-bottom: 1px solid #e5e5e5; }}
+  th {{ font-weight: 600; font-size: 12px; text-transform: uppercase; color: #666; background: #fafafa; position: sticky; top: 0; }}
+  tr:hover td {{ background: #f5f8ff; }}
+  .num, .stops {{ text-align: right; color: #999; }}
+  .price {{ text-align: right; font-weight: 600; }}
+  .pers {{ text-align: right; color: #666; }}
+  .hm {{ color: #888; font-size: 12px; }}
+  .dur, .car {{ font-size: 12px; color: #555; }}
+  .vi {{ background: #fff3cd; color: #856404; font-size: 10px; padding: 2px 6px; border-radius: 3px; font-weight: 600; }}
+  .nolink {{ color: #ccc; }}
+  a.book {{ display: inline-block; padding: 4px 10px; background: #0366d6; color: #fff; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: 600; }}
+  a.book:hover {{ background: #0256b3; }}
+  @media (prefers-color-scheme: dark) {{
+    body {{ background: #1a1a1a; color: #e5e5e5; }}
+    th {{ background: #2a2a2a; color: #aaa; }}
+    th, td {{ border-color: #333; }}
+    tr:hover td {{ background: #222; }}
+    .hm, .sub {{ color: #888; }}
+    .dur, .car, .pers {{ color: #aaa; }}
+    .vi {{ background: #3a2f00; color: #ffc107; }}
+  }}
+</style>
+</head>
+<body>
+  <h1>{html.escape(title)}</h1>
+  <div class="sub">{html.escape(subtitle)}</div>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>Origine</th><th>Total CAD</th><th>/pers</th>
+        <th>Depart (aller)</th><th>Depart (retour)</th>
+        <th>Escales</th><th>Durees</th><th>Transporteurs</th>
+        <th>Flag</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {''.join(rows)}
+    </tbody>
+  </table>
+</body>
+</html>
+"""
+    out_dir = os.path.join(os.path.dirname(__file__), '..', 'cache', 'flights')
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, 'latest.html')
+    with open(path, 'w') as f:
+        f.write(doc)
     return path
 
 
