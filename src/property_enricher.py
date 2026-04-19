@@ -279,6 +279,26 @@ class PropertyEnricher:
             existing_neg = prop.get('negative_flags', [])
             prop['negative_flags'] = list(dict.fromkeys(existing_neg + extra_negatives))
 
+        # --- Resort re-detection ---
+        # The list-API scan often misses resort names because only tags &
+        # community fields were available. Now that we have the full MLS
+        # description, re-run the match on the combined text and upgrade
+        # the resort label if it was "Unknown Resort".
+        # Lazy import to avoid circular dependency (property_finder imports
+        # from this module at top level).
+        from property_finder import identify_resort
+
+        current_resort = prop.get('resort_name', '') or ''
+        if current_resort == 'Unknown Resort' or not current_resort:
+            combined = ' '.join(filter(None, [
+                prop.get('address', ''),
+                full_description or '',
+                ' '.join(prop.get('str_keywords_found', []) or []),
+            ]))
+            detected = identify_resort(combined)
+            if detected:
+                prop['resort_name'] = detected
+
         # --- Additional useful fields ---
         prop['price_per_sqft'] = self._extract_price_per_sqft(detail)
         prop['days_on_market'] = self._extract_days_on_market(detail)

@@ -86,6 +86,115 @@ _DEFAULT_RATES_BY_BEDROOMS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Known STR-friendly resort/community dictionary
+# ---------------------------------------------------------------------------
+# Maps lowercase search key → canonical display name. Keys use word-boundary
+# matching so "vistana" won't match inside "vistanaxyz".
+# Shared by both the list-data scanner (RealtyInUSAPI) and the post-enrichment
+# re-scan (PropertyEnricher) — the enricher has access to the full MLS
+# description text where community names most commonly appear.
+# ---------------------------------------------------------------------------
+KNOWN_RESORTS = {
+    # Established Disney-corridor resort communities
+    'windsor hills': 'Windsor Hills Resort',
+    'windsor palms': 'Windsor Palms Resort',
+    'windsor cay': 'Windsor Cay Resort',
+    'windsor island': 'Windsor Island Resort',
+    'windsor at westside': 'Windsor at Westside',
+    'terra verde': 'Terra Verde Resort',
+    'storey lake': 'Storey Lake',
+    'solterra': 'Solterra Resort',
+    'solara resort': 'Solara Resort',
+    'solara': 'Solara Resort',
+    'vista cay': 'Vista Cay Resort',
+    'celebration': 'Celebration',
+    'reunion resort': 'Reunion Resort',
+    'reunion': 'Reunion Resort',
+    'orange lake': 'Orange Lake Resort',
+    'encore resort': 'Encore Resort',
+    'encore club': 'Encore Resort',
+    'paradise palms': 'Paradise Palms Resort',
+    'champions gate': 'ChampionsGate Resort',
+    'championsgate': 'ChampionsGate Resort',
+    'regal palms': 'Regal Palms Resort',
+    'regal oaks': 'Regal Oaks Resort',
+    'bahama bay': 'Bahama Bay Resort',
+    'westgate': 'Westgate Resort',
+    'emerald island': 'Emerald Island Resort',
+    'terracotta': 'Terracotta Resort',
+    'lake berkley': 'Lake Berkley Resort',
+    'rolling hills': 'Rolling Hills',
+    'greater groves': 'Greater Groves',
+    'kingdom ridge': 'Kingdom Ridge',
+    'four corners': 'Four Corners',
+    'west haven': 'West Haven Resort',
+    'vacation village': 'Vacation Village Resort',
+    'aviana resort': 'Aviana Resort',
+    'aviana': 'Aviana Resort',
+    # Vacation home communities
+    'encantada': 'Encantada Resort',
+    'bella vida': 'Bella Vida Resort',
+    'bella piazza': 'Bella Piazza Resort',
+    'highlands reserve': 'Highlands Reserve',
+    'ridgewood lakes': 'Ridgewood Lakes',
+    'indian creek': 'Indian Creek',
+    'tuscan hills': 'Tuscan Hills',
+    'watersong': 'Watersong Resort',
+    'veranda palms': 'Veranda Palms',
+    'calabay parc': 'Calabay Parc',
+    'crystal cove': 'Crystal Cove Resort',
+    'cumbrian lakes': 'Cumbrian Lakes',
+    'hampton lakes': 'Hampton Lakes',
+    'eagle pointe': 'Eagle Pointe',
+    'legacy park': 'Legacy Park',
+    'sunset lakes': 'Sunset Lakes',
+    # Condo-hotel / resort-style
+    'cypress pointe': 'Cypress Pointe Resort',
+    'floridays': 'Floridays Resort',
+    'mystic dunes': 'Mystic Dunes Resort',
+    'liki tiki': 'Liki Tiki Village',
+    'caribe cove': 'Caribe Cove Resort',
+    # Universal / International Drive corridor
+    'point orlando': 'The Point Orlando Resort',
+    'the point orlando': 'The Point Orlando Resort',
+    'international drive': 'I-Drive Corridor',
+    'i-drive': 'I-Drive Corridor',
+    'idrive': 'I-Drive Corridor',
+    'sand lake': 'Sand Lake / Dr. Phillips',
+    'dr phillips': 'Dr. Phillips',
+    'doctor phillips': 'Dr. Phillips',
+    'universal palms': 'Universal Palms Resort',
+    'parkway palms': 'Parkway Palms Resort',
+    'palm pointe': 'Palm Pointe Resort',
+    'williamsburg': 'Williamsburg Condos',
+    'caribe royale': 'Caribe Royale Resort',
+    'sheraton vistana': 'Sheraton Vistana',
+    'vistana': 'Sheraton Vistana',
+    'worldquest': 'WorldQuest Resort',
+    'world quest': 'WorldQuest Resort',
+}
+
+# Sort keys by length descending so longer/more-specific names match first
+# ("champions gate" before "champions", "sheraton vistana" before "vistana")
+_RESORT_KEYS_BY_LENGTH = sorted(KNOWN_RESORTS.keys(), key=len, reverse=True)
+
+
+def identify_resort(text: str) -> Optional[str]:
+    """Scan a text blob (address + description + tags etc.) for known resort
+    names. Returns the canonical resort name or None if nothing matches.
+
+    Longer keys are tried first so "championsgate" wins over "champions".
+    """
+    if not text:
+        return None
+    text_lower = text.lower()
+    for key in _RESORT_KEYS_BY_LENGTH:
+        if re.search(r'\b' + re.escape(key) + r'\b', text_lower):
+            return KNOWN_RESORTS[key]
+    return None
+
+
 def estimate_str_revenue(zip_code: str, bedrooms: int) -> dict:
     """Return (median_adr, occupancy, monthly_gross) for a given zip+bedroom.
 
@@ -453,119 +562,36 @@ class RealtyInUSAPI:
         return ". ".join(parts) + "." if parts else "Property details available"
     
     def _identify_resort_from_address(self, address: str, city: str, prop: dict = None) -> str:
-        """Identify if property is in a known resort"""
+        """Identify if property is in a known resort from list-API data.
+
+        Delegates the actual dictionary match to the module-level
+        ``identify_resort()`` so the enricher can reuse the same logic
+        on the richer full-description text it fetches later.
+        """
         address_lower = (address or '').lower()
-        city_lower = (city or '').lower()
-        
+
         # Build a combined search text from all available fields
         search_text = address_lower
         if prop:
             # Check community/subdivision name from API data
             location = prop.get('location', {}) or {}
             address_obj = location.get('address', {}) or {}
-            # Some listings have community or subdivision info
             community = address_obj.get('community', '') or ''
             neighborhood = location.get('neighborhood', '') or ''
             search_text += ' ' + community.lower() + ' ' + neighborhood.lower()
-            
+
             # Also check the description text
             description_obj = prop.get('description', {}) or {}
-            # The API sometimes has a text field or name field
             for field in ['text', 'name', 'sub_type']:
                 val = description_obj.get(field, '') or ''
                 search_text += ' ' + val.lower()
-            
+
             # Check tags for resort/community names
             tags = prop.get('tags', []) or []
             for tag in tags:
                 search_text += ' ' + tag.lower()
-        
-        # Known STR-friendly resort communities in the Orlando/Kissimmee area.
-        # Multi-word keys with word-boundary matching to avoid false positives.
-        resorts = {
-            # Established resort communities
-            'windsor hills': 'Windsor Hills Resort',
-            'windsor palms': 'Windsor Palms Resort',
-            'windsor cay': 'Windsor Cay Resort',
-            'windsor island': 'Windsor Island Resort',
-            'windsor at westside': 'Windsor at Westside',
-            'terra verde': 'Terra Verde Resort',
-            'storey lake': 'Storey Lake',
-            'solterra': 'Solterra Resort',
-            'solara resort': 'Solara Resort',
-            'solara': 'Solara Resort',
-            'vista cay': 'Vista Cay Resort',
-            'celebration': 'Celebration',
-            'reunion resort': 'Reunion Resort',
-            'orange lake': 'Orange Lake Resort',
-            'encore resort': 'Encore Resort',
-            'paradise palms': 'Paradise Palms Resort',
-            'champions gate': 'ChampionsGate Resort',
-            'championsgate': 'ChampionsGate Resort',
-            'regal palms': 'Regal Palms Resort',
-            'regal oaks': 'Regal Oaks Resort',
-            'bahama bay': 'Bahama Bay Resort',
-            'westgate': 'Westgate Resort',
-            'emerald island': 'Emerald Island Resort',
-            'terracotta': 'Terracotta Resort',
-            'lake berkley': 'Lake Berkley Resort',
-            'rolling hills': 'Rolling Hills',
-            'greater groves': 'Greater Groves',
-            'kingdom ridge': 'Kingdom Ridge',
-            'four corners': 'Four Corners',
-            'west haven': 'West Haven Resort',
-            'vacation village': 'Vacation Village Resort',
-            'aviana resort': 'Aviana Resort',
-            'aviana': 'Aviana Resort',
-            # Vacation home communities
-            'encantada': 'Encantada Resort',
-            'bella vida': 'Bella Vida Resort',
-            'bella piazza': 'Bella Piazza Resort',
-            'highlands reserve': 'Highlands Reserve',
-            'ridgewood lakes': 'Ridgewood Lakes',
-            'indian creek': 'Indian Creek',
-            'tuscan hills': 'Tuscan Hills',
-            'watersong': 'Watersong Resort',
-            'veranda palms': 'Veranda Palms',
-            'calabay parc': 'Calabay Parc',
-            'crystal cove': 'Crystal Cove Resort',
-            'cumbrian lakes': 'Cumbrian Lakes',
-            'hampton lakes': 'Hampton Lakes',
-            'eagle pointe': 'Eagle Pointe',
-            'legacy park': 'Legacy Park',
-            'sunset lakes': 'Sunset Lakes',
-            # Condo-hotel / resort-style
-            'cypress pointe': 'Cypress Pointe Resort',
-            'floridays': 'Floridays Resort',
-            'mystic dunes': 'Mystic Dunes Resort',
-            'liki tiki': 'Liki Tiki Village',
-            'caribe cove': 'Caribe Cove Resort',
-            # Universal / International Drive corridor
-            'point orlando': 'The Point Orlando Resort',
-            'the point orlando': 'The Point Orlando Resort',
-            'international drive': 'I-Drive Corridor',
-            'i-drive': 'I-Drive Corridor',
-            'idrive': 'I-Drive Corridor',
-            'sand lake': 'Sand Lake / Dr. Phillips',
-            'dr phillips': 'Dr. Phillips',
-            'doctor phillips': 'Dr. Phillips',
-            'universal palms': 'Universal Palms Resort',
-            'parkway palms': 'Parkway Palms Resort',
-            'palm pointe': 'Palm Pointe Resort',
-            'williamsburg': 'Williamsburg Condos',
-            'caribe royale': 'Caribe Royale Resort',
-            'sheraton vistana': 'Sheraton Vistana',
-            'vistana': 'Sheraton Vistana',
-            'worldquest': 'WorldQuest Resort',
-            'world quest': 'WorldQuest Resort',
-        }
 
-        # Check all text for resort mentions using word boundaries
-        for resort_key, resort_name in resorts.items():
-            if re.search(r'\b' + re.escape(resort_key) + r'\b', search_text):
-                return resort_name
-                
-        return "Unknown Resort"
+        return identify_resort(search_text) or "Unknown Resort"
     
     def _find_str_keywords_in_data(self, description_obj: dict, prop: dict) -> List[str]:
         """Find STR/investor keywords in the property data"""
