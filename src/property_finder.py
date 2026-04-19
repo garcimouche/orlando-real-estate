@@ -223,6 +223,50 @@ def estimate_str_revenue(zip_code: str, bedrooms: int) -> dict:
     }
 
 
+def estimate_cashflow(
+    prop: dict,
+    down_payment_pct: float = 30,
+    mortgage_rate_pct: float = 7.5,
+    mgmt_pct: float = 20,
+    insurance_monthly: float = 180,
+    maintenance_monthly: float = 150,
+    default_hoa_monthly: float = 300,
+) -> Optional[float]:
+    """Estimate monthly cashflow (USD) for a property, mirroring the
+    ``computeBase().cfBrut`` formula in property_finance.jsx at its default
+    slider values so the Python ranking matches what the UI shows when the
+    property is first opened.
+
+    Returns None when essential data (price, revenue estimate) is missing.
+    """
+    prix = prop.get('price') or 0
+    rev_bruts = prop.get('estimated_monthly_gross') or 0
+    if prix <= 0 or rev_bruts <= 0:
+        return None
+
+    hoa = prop.get('hoa_fee_monthly')
+    if hoa is None:
+        hoa = default_hoa_monthly
+    t_occ_pct = (prop.get('estimated_occupancy') or 0.68) * 100
+
+    down = prix * down_payment_pct / 100
+    loan = prix - down
+    mr = mortgage_rate_pct / 100 / 12
+    if loan > 0 and mr > 0:
+        hypo = loan * (mr * (1 + mr) ** 360) / ((1 + mr) ** 360 - 1)
+    else:
+        hypo = 0
+
+    # Mirror JSX: property taxes estimated as 1.5%/yr of price, ignoring
+    # detail-endpoint `annual_tax`, so the ranking matches the default UI view.
+    taxes_fonc = prix * 0.015 / 12
+    rev_net = rev_bruts * t_occ_pct / 100
+    gestion = rev_net * mgmt_pct / 100
+    charges_op = gestion + hoa + taxes_fonc + insurance_monthly + maintenance_monthly
+    cf_brut = rev_net - charges_op - hypo
+    return round(cf_brut, 2)
+
+
 class RealtyInUSAPI:
     """Handler for Realty-in-US API integration"""
     
@@ -837,9 +881,10 @@ class EnhancedPropertyDiscoveryAgent:
                 f"STR filter: {filtered_no_str} properties rejected (no STR signals)"
             )
         
-        # Sort by initial score to pick top candidates for enrichment
+        # Sort by preliminary cashflow to pick top candidates for enrichment
+        # (HOA not yet known, so estimate_cashflow uses default HOA=300 for all).
         processed_properties.sort(
-            key=lambda x: x.get('investment_score', 0),
+            key=lambda x: x.get('estimated_monthly_cashflow') if x.get('estimated_monthly_cashflow') is not None else -1e9,
             reverse=True
         )
 
@@ -873,13 +918,17 @@ class EnhancedPropertyDiscoveryAgent:
                         continue
                     base_score = prop.get('investment_score', 0)
                     prop['investment_score'] = calculate_adjusted_score(prop, base_score)
+                    # Recompute cashflow now that real HOA is known.
+                    prop['estimated_monthly_cashflow'] = estimate_cashflow(prop)
                 surviving.append(prop)
             processed_properties = surviving
 
-        # Final sort after re-scoring
+        # Final sort: best investing opportunities first — by estimated monthly
+        # cashflow (USD, before Canadian taxes). Properties with no cashflow
+        # estimate sink to the bottom.
         self.discovered_properties = sorted(
             processed_properties,
-            key=lambda x: x.get('investment_score', 0),
+            key=lambda x: x.get('estimated_monthly_cashflow') if x.get('estimated_monthly_cashflow') is not None else -1e9,
             reverse=True
         )
 
@@ -954,6 +1003,18 @@ class EnhancedPropertyDiscoveryAgent:
             if investment_score >= 3.0:
                 prop['investment_score'] = round(investment_score, 1)
                 prop['score_timestamp'] = datetime.now().isoformat()
+
+                # Attach revenue + preliminary cashflow so downstream sorts
+                # can rank by cashflow. Pre-enrichment HOA is unknown, so
+                # estimate_cashflow falls back to the default HOA; the value
+                # is recomputed after enrichment once the real HOA is known.
+                rev = self._estimate_str_revenue(prop)
+                prop['estimated_nightly'] = rev['adr']
+                prop['estimated_occupancy'] = rev['occupancy']
+                prop['estimated_monthly_gross'] = rev['monthly_gross']
+                prop['revenue_estimate_source'] = rev['source']
+                prop['zip_used'] = rev['zip_used']
+                prop['estimated_monthly_cashflow'] = estimate_cashflow(prop)
                 return prop
             else:
                 return None
@@ -1154,6 +1215,9 @@ class EnhancedPropertyDiscoveryAgent:
                 'estimated_occupancy': rev['occupancy'],
                 'estimated_monthly_gross': rev['monthly_gross'],
                 'revenue_estimate_source': rev['source'],
+                # Monthly cashflow (USD) used as the primary ranking key,
+                # mirroring computeBase.cfBrut at default sliders.
+                'estimated_monthly_cashflow': prop.get('estimated_monthly_cashflow'),
             })
 
         payload = {
@@ -1234,7 +1298,8 @@ class EnhancedPropertyDiscoveryAgent:
             return
         
         print(f"📊 Found {len(self.discovered_properties)} total properties")
-        print(f"🎯 Showing top {len(top_properties)} STR opportunities\n")
+        print(f"🎯 Showing top {len(top_properties)} STR opportunities")
+        print(f"   📈 Ranked by estimated monthly cashflow (best first)\n")
         
         # Load financing terms from environment
         down_payment_pct = float(os.getenv('DOWN_PAYMENT_PCT', 25))
@@ -1330,6 +1395,12 @@ class EnhancedPropertyDiscoveryAgent:
             cash_flow = estimated_monthly_net - total_fixed
             cash_flow_color = '🟢' if cash_flow > 0 else '🔴'
             print(f"   {cash_flow_color} Est. Monthly Cash Flow: ${cash_flow:,.0f} (after mortgage + HOA + tax)")
+            # Ranking cashflow — matches the finance UI at default sliders
+            # and is what drives the sort order.
+            ranking_cf = prop.get('estimated_monthly_cashflow')
+            if ranking_cf is not None:
+                ranking_color = '🟢' if ranking_cf > 0 else '🔴'
+                print(f"   {ranking_color} Ranking Cash Flow (UI defaults): ${ranking_cf:,.0f}/mo")
             
             print(f"   🔗 Source: {prop['source']}")
             print(f"   🌐 {prop.get('listing_url', 'URL available in full data')}")
