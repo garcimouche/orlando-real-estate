@@ -18,3 +18,11 @@ Rouler le serveur python avec
 `./start_web_finance.sh`
 
 Ouvrir un browser a l'adresse: [analyse financiere](http://localhost:8000/src/property_finance.html)
+
+## Vols
+
+Trouver des vols aller-retour pas chers vers Orlando (MCO) depuis YUL / BTV / PBG / YOW:
+
+`python3 find_flights.py --from 2026-11-05 --to 2026-11-14 --pax 2`
+
+Flex ±1 jour par défaut, max 1 escale par vol, cabine Economy, prix en CAD. Les résultats sont mis en cache (6h) sous `cache/flights/`; rejouer sans appel API avec `--local`. Voir `python3 find_flights.py --help` pour toutes les options.
