@@ -332,6 +332,14 @@ function DiscoveryTab(props) {
 
   return (
     <div>
+      {strSignals.length > 0 && (
+        <Card title="Signaux STR" accent="#52b788">
+          {strSignals.map((s, i) => (
+            <div key={i} style={{ padding: "5px 0", fontSize: 12, color: "#9ab0c0" }}>• {s}</div>
+          ))}
+        </Card>
+      )}
+
       <Card title={"Score STR : " + (p.investment_score || 0).toFixed(1) + " / 10"} accent="#2a9d8f">
         <Row label="Type" value={p.property_type + " · " + p.bedrooms + "BR/" + p.bathrooms + "BA"} />
         <Row label="Surface" value={(p.square_feet || 0).toLocaleString() + " sqft"} />
@@ -346,14 +354,6 @@ function DiscoveryTab(props) {
         {p.flood_risk && <Row label="Risque inondation" value={p.flood_risk} color={p.flood_risk === "minimal" ? "#52b788" : "#d4a017"} />}
         {p.parking && <Row label="Stationnement" value={p.parking} />}
       </Card>
-
-      {strSignals.length > 0 && (
-        <Card title="Signaux STR" accent="#52b788">
-          {strSignals.map((s, i) => (
-            <div key={i} style={{ padding: "5px 0", fontSize: 12, color: "#9ab0c0" }}>• {s}</div>
-          ))}
-        </Card>
-      )}
 
       {p.negative_flags && p.negative_flags.length > 0 && (
         <Card title="Drapeaux rouges" accent="#e07070">
