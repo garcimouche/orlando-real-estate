@@ -893,6 +893,10 @@ class EnhancedPropertyDiscoveryAgent:
         - STR keyword found in listing data (tags, description, flags)
         - Located in a known resort community
         - Located in a zip code known to have STR-friendly communities
+
+        This is the permissive discovery-time gate — the zip-code fallback
+        lets us still score properties in STR-friendly geographies when the
+        list API text didn't contain explicit keywords.
         """
         # Check STR keywords
         str_keywords = prop.get('str_keywords_found', [])
@@ -910,6 +914,20 @@ class EnhancedPropertyDiscoveryAgent:
             if zip_code in address:
                 return True
 
+        return False
+
+    def _has_explicit_str_signals(self, prop: dict) -> bool:
+        """Strong STR signal — explicit keywords in the listing data or a
+        recognized resort community. Does NOT accept zip-code-only matches.
+
+        Used for the finance-tool export so we don't surface properties that
+        passed the permissive gate purely on geography.
+        """
+        if prop.get('str_keywords_found'):
+            return True
+        resort = prop.get('resort_name', '')
+        if resort and resort != 'Unknown Resort':
+            return True
         return False
 
     def _process_property_for_str_investment(self, prop: dict) -> Optional[Dict]:
@@ -1033,21 +1051,35 @@ class EnhancedPropertyDiscoveryAgent:
         detail_calls = self.enricher.api_call_count if self.enricher else 0
         return list_calls + detail_calls
 
-    def get_top_str_properties(self, limit: int = 20) -> List[Dict]:
+    def get_top_str_properties(self, limit: int = 20,
+                               require_explicit_signals: bool = False) -> List[Dict]:
         """Get top N properties by STR investment score.
 
         Returns all ranked properties up to limit — no score threshold,
         so the finance tool can compare why #20 ranks lower than #1.
+
+        When ``require_explicit_signals`` is True, drop properties whose
+        only STR signal is the zip-code fallback (i.e. keep only those
+        with explicit listing keywords or a known resort match).
         """
-        return list(self.discovered_properties[:limit])
-    
+        pool = self.discovered_properties
+        if require_explicit_signals:
+            pool = [p for p in pool if self._has_explicit_str_signals(p)]
+        return list(pool[:limit])
+
     def export_scored_properties(self, limit: int = 20,
-                                  output_path: str = None) -> str:
+                                  output_path: str = None,
+                                  require_explicit_signals: bool = True) -> str:
         """Write the top-N ranked properties to cache/scored_properties.json.
 
         This file is consumed by property_finance.html (the web-based
         investment analyzer). Contains everything needed to render the
         Discovery tab + pre-fill the finance sliders.
+
+        By default we only export properties with *explicit* STR signals
+        (listing keywords or a recognized resort). Zip-code-only matches
+        are dropped so the finance tool doesn't analyze generic Davenport
+        homes that merely sit in a STR-friendly market.
 
         Returns the path written.
         """
@@ -1056,7 +1088,19 @@ class EnhancedPropertyDiscoveryAgent:
                 os.path.dirname(__file__), '..', 'cache', 'scored_properties.json'
             )
 
-        top = self.get_top_str_properties(limit)
+        top = self.get_top_str_properties(
+            limit, require_explicit_signals=require_explicit_signals
+        )
+        if require_explicit_signals:
+            dropped = sum(
+                1 for p in self.discovered_properties[:limit]
+                if not self._has_explicit_str_signals(p)
+            )
+            if dropped:
+                self.logger.info(
+                    f"Export filter: dropped {dropped} zip-only matches "
+                    f"(kept {len(top)} with explicit STR signals)"
+                )
         export = []
         for rank, prop in enumerate(top, 1):
             rev = self._estimate_str_revenue(prop)
