@@ -5,12 +5,64 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Orlando STR — Analyse financière</title>
     <style>
+        /* -----------------------------------------------------------
+           Theme tokens — neutral palette flips per theme.
+           Accent colors (teal #2a9d8f, green #52b788, blue #3d7fbf,
+           gold #d4a017, red #e07070, yellow #ffd166) stay constant.
+           ----------------------------------------------------------- */
+        :root[data-theme="dark"] {
+            --bg-app: #060e18;
+            --bg-card: #0e1c2c;
+            --bg-elevated: #0d1e2c;
+            --bg-soft: #0a1624;
+            --bg-chip: #1a2535;
+            --bg-success: #0d2a1e;
+            --bg-success-deep: #0d2010;
+            --bg-danger: #2a0d0d;
+            --bg-danger-deep: #3a0d0d;
+            --bg-warning: #3a2d0a;
+            --divider: #0a1520;
+            --border: #1f2a38;
+            --axis: #2a3a4a;
+            --fg-primary: #e8f4fd;
+            --fg-primary-alt: #a0c0d8;
+            --fg-secondary: #9ab0c0;
+            --fg-muted: #7090a8;
+            --fg-dim: #607080;
+            --fg-faint: #405060;
+            --fg-subtle: #304050;
+            --shadow-dropdown: 0 8px 24px rgba(0,0,0,0.4);
+        }
+        :root[data-theme="light"] {
+            --bg-app: #f7fafc;
+            --bg-card: #ffffff;
+            --bg-elevated: #eef2f7;
+            --bg-soft: #e6ecf2;
+            --bg-chip: #d8e0ea;
+            --bg-success: #e4f3ec;
+            --bg-success-deep: #ddefe2;
+            --bg-danger: #fde8e8;
+            --bg-danger-deep: #fcd6d6;
+            --bg-warning: #fbeecc;
+            --divider: #e2e8f0;
+            --border: #c8d3de;
+            --axis: #b5c2cf;
+            --fg-primary: #0f1a2a;
+            --fg-primary-alt: #324358;
+            --fg-secondary: #4a5868;
+            --fg-muted: #6a7886;
+            --fg-dim: #8a94a0;
+            --fg-faint: #a8b0ba;
+            --fg-subtle: #c0c6ce;
+            --shadow-dropdown: 0 8px 24px rgba(20,40,70,0.12);
+        }
         html, body {
             margin: 0;
             padding: 0;
-            background: #060e18;
-            color: #e8f4fd;
+            background: var(--bg-app);
+            color: var(--fg-primary);
             font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif;
+            transition: background-color 120ms ease, color 120ms ease;
         }
         #root {
             width: 80%;
@@ -28,13 +80,23 @@
         #loading {
             padding: 40px 20px;
             text-align: center;
-            color: #607080;
+            color: var(--fg-dim);
             font-size: 14px;
         }
         code {
             font-family: "SF Mono", Monaco, monospace;
         }
     </style>
+
+    <!-- Set theme before React mounts to avoid flash. Default: light. -->
+    <script>
+        (function () {
+            var saved = null;
+            try { saved = localStorage.getItem("theme"); } catch (e) {}
+            var theme = saved === "dark" || saved === "light" ? saved : "light";
+            document.documentElement.setAttribute("data-theme", theme);
+        })();
+    </script>
 
     <!-- React 18 + Babel Standalone from CDN -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -76,9 +138,9 @@
                     "<div style='padding:40px 20px;text-align:center;color:#e07070;font-size:14px;'>" +
                     "<div style='font-size:18px;margin-bottom:10px;'>⚠️ Erreur de chargement</div>" +
                     "<div>" + String(err) + "</div>" +
-                    "<div style='margin-top:20px;color:#7090a8;font-size:12px;line-height:1.6;'>" +
+                    "<div style='margin-top:20px;color:var(--fg-muted);font-size:12px;line-height:1.6;'>" +
                     "Lance le serveur local :<br>" +
-                    "<code style='background:#0a1624;padding:4px 8px;border-radius:4px;color:#a0b0c0;'>./src/start_web_finance.sh</code>" +
+                    "<code style='background:var(--bg-soft);padding:4px 8px;border-radius:4px;color:var(--fg-secondary);'>./src/start_web_finance.sh</code>" +
                     "</div></div>";
                 console.error(err);
             });

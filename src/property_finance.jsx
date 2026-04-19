@@ -44,19 +44,19 @@ function Slider(props) {
   return (
     <div style={{ marginBottom: 18 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-        <span style={{ fontSize: 11, color: "#a0b0c0", textTransform: "uppercase", letterSpacing: "0.07em" }}>{props.label}</span>
-        <span style={{ fontSize: 16, fontWeight: 700, color: "#e8f4fd", fontFamily: "Georgia, serif" }}>{display}</span>
+        <span style={{ fontSize: 11, color: "var(--fg-secondary)", textTransform: "uppercase", letterSpacing: "0.07em" }}>{props.label}</span>
+        <span style={{ fontSize: 16, fontWeight: 700, color: "var(--fg-primary)", fontFamily: "Georgia, serif" }}>{display}</span>
       </div>
-      {props.sublabel && <div style={{ fontSize: 11, color: "#607080", marginBottom: 4 }}>{props.sublabel}</div>}
-      <div style={{ position: "relative", height: 6, background: "#1a2535", borderRadius: 3 }}>
+      {props.sublabel && <div style={{ fontSize: 11, color: "var(--fg-dim)", marginBottom: 4 }}>{props.sublabel}</div>}
+      <div style={{ position: "relative", height: 6, background: "var(--bg-chip)", borderRadius: 3 }}>
         <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: w + "%", background: "#2a9d8f", borderRadius: 3 }} />
         <input type="range" min={props.min} max={props.max} step={props.step || 1} value={props.value}
           onChange={(e) => props.onChange(Number(e.target.value))}
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", margin: 0 }} />
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
-        <span style={{ fontSize: 10, color: "#304050" }}>{props.formatFn ? props.formatFn(props.min) : props.min}</span>
-        <span style={{ fontSize: 10, color: "#304050" }}>{props.formatFn ? props.formatFn(props.max) : props.max}</span>
+        <span style={{ fontSize: 10, color: "var(--fg-subtle)" }}>{props.formatFn ? props.formatFn(props.min) : props.min}</span>
+        <span style={{ fontSize: 10, color: "var(--fg-subtle)" }}>{props.formatFn ? props.formatFn(props.max) : props.max}</span>
       </div>
     </div>
   );
@@ -65,7 +65,7 @@ function Slider(props) {
 function Card(props) {
   const ac = props.accent || "#2a9d8f";
   return (
-    <div style={{ background: "#0e1c2c", border: "1px solid " + ac + "44", borderRadius: 14, padding: "16px 18px", marginBottom: 12 }}>
+    <div style={{ background: "var(--bg-card)", border: "1px solid " + ac + "44", borderRadius: 14, padding: "16px 18px", marginBottom: 12 }}>
       {props.title && <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: ac, marginBottom: 10, fontWeight: 600 }}>{props.title}</div>}
       {props.children}
     </div>
@@ -73,16 +73,16 @@ function Card(props) {
 }
 
 function Row(props) {
-  const labelColor = props.highlight ? "#e8f4fd" : "#7090a8";
-  const valColor = props.color || (props.highlight ? "#e8f4fd" : "#9ab0c0");
+  const labelColor = props.highlight ? "var(--fg-primary)" : "var(--fg-muted)";
+  const valColor = props.color || (props.highlight ? "var(--fg-primary)" : "var(--fg-secondary)");
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid #0a1520" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--divider)" }}>
       <div style={{ flex: 1, marginRight: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           <span style={{ fontSize: 13, color: labelColor, fontWeight: props.highlight ? 600 : 400 }}>{props.label}</span>
-          {props.info && <span style={{ fontSize: 9, background: "#1a2535", color: "#52b788", borderRadius: 3, padding: "1px 4px" }}>{props.info}</span>}
+          {props.info && <span style={{ fontSize: 9, background: "var(--bg-chip)", color: "#52b788", borderRadius: 3, padding: "1px 4px" }}>{props.info}</span>}
         </div>
-        {props.sub && <div style={{ fontSize: 10, color: "#405060", marginTop: 1 }}>{props.sub}</div>}
+        {props.sub && <div style={{ fontSize: 10, color: "var(--fg-faint)", marginTop: 1 }}>{props.sub}</div>}
       </div>
       <div style={{ fontSize: props.highlight ? 14 : 13, fontWeight: props.highlight ? 700 : 500, color: valColor, fontFamily: "Georgia, serif", whiteSpace: "nowrap" }}>{props.value}</div>
     </div>
@@ -95,10 +95,10 @@ function Gauge(props) {
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-        <span style={{ fontSize: 11, color: "#7090a8" }}>{props.label}</span>
+        <span style={{ fontSize: 11, color: "var(--fg-muted)" }}>{props.label}</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: c, fontFamily: "Georgia, serif" }}>{pct(p)}</span>
       </div>
-      <div style={{ height: 5, background: "#1a2535", borderRadius: 3 }}>
+      <div style={{ height: 5, background: "var(--bg-chip)", borderRadius: 3 }}>
         <div style={{ height: "100%", width: p + "%", background: c, borderRadius: 3 }} />
       </div>
     </div>
@@ -233,17 +233,17 @@ function MiniChart(props) {
           const y = toY(v);
           return (
             <g key={i}>
-              <line x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} stroke="#1a2535" strokeWidth="1" />
-              <text x={PAD.left - 4} y={y + 4} textAnchor="end" fontSize="9" fill="#405060">{fmtK(v)}</text>
+              <line x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} stroke="var(--bg-chip)" strokeWidth="1" />
+              <text x={PAD.left - 4} y={y + 4} textAnchor="end" fontSize="9" fill="var(--fg-faint)">{fmtK(v)}</text>
             </g>
           );
         })}
         {[0, 4, 9, 14, 19].map((i) => (
-          <text key={i} x={toX(i)} y={H - 4} textAnchor="middle" fontSize="9" fill="#405060">{i + 1}a</text>
+          <text key={i} x={toX(i)} y={H - 4} textAnchor="middle" fontSize="9" fill="var(--fg-faint)">{i + 1}a</text>
         ))}
         <path d={etfPath} fill="none" stroke="#3d7fbf" strokeWidth="2" strokeDasharray="4,3" />
         <path d={immoPath} fill="none" stroke="#52b788" strokeWidth="2.5" />
-        <line x1={selX} y1={PAD.top} x2={selX} y2={H - PAD.bottom} stroke="#e8f4fd" strokeWidth="1" strokeDasharray="3,2" />
+        <line x1={selX} y1={PAD.top} x2={selX} y2={H - PAD.bottom} stroke="var(--fg-primary)" strokeWidth="1" strokeDasharray="3,2" />
         <circle cx={selX} cy={selImmoY} r="4" fill="#52b788" />
         <circle cx={selX} cy={selEtfY} r="4" fill="#3d7fbf" />
         <text x={W - PAD.right} y={PAD.top + 10} textAnchor="end" fontSize="9" fill="#52b788">Immo</text>
@@ -266,9 +266,9 @@ function PropertySelector(props) {
 
   return (
     <div style={{ position: "relative", marginBottom: 14 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#0a1624", border: "1px solid #1a2535", borderRadius: 12, padding: "10px 12px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--bg-soft)", border: "1px solid var(--bg-chip)", borderRadius: 12, padding: "10px 12px" }}>
         <button onClick={() => go(-1)}
-          style={{ background: "#0e1c2c", border: "1px solid #1a2535", color: "#a0b0c0", width: 32, height: 32, borderRadius: 8, cursor: "pointer", fontSize: 14 }}>◀</button>
+          style={{ background: "var(--bg-card)", border: "1px solid var(--bg-chip)", color: "var(--fg-secondary)", width: 32, height: 32, borderRadius: 8, cursor: "pointer", fontSize: 14 }}>◀</button>
         <div onClick={() => setOpen(!open)} style={{ flex: 1, cursor: "pointer" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
             <div>
@@ -276,39 +276,39 @@ function PropertySelector(props) {
                 #{current.rank} / {properties.length}
               </span>
               {current.detail_is_new && (
-                <span style={{ marginLeft: 8, fontSize: 9, color: "#ffd166", background: "#3a2d0a", padding: "1px 6px", borderRadius: 8, letterSpacing: "0.1em", fontWeight: 700 }}>✨ NEW</span>
+                <span style={{ marginLeft: 8, fontSize: 9, color: "#ffd166", background: "var(--bg-warning)", padding: "1px 6px", borderRadius: 8, letterSpacing: "0.1em", fontWeight: 700 }}>✨ NEW</span>
               )}
               {current.is_price_reduced && (
-                <span style={{ marginLeft: 6, fontSize: 9, color: "#e07070", background: "#3a0d0d", padding: "1px 6px", borderRadius: 8, letterSpacing: "0.1em", fontWeight: 700 }}>↓ PRICE</span>
+                <span style={{ marginLeft: 6, fontSize: 9, color: "#e07070", background: "var(--bg-danger-deep)", padding: "1px 6px", borderRadius: 8, letterSpacing: "0.1em", fontWeight: 700 }}>↓ PRICE</span>
               )}
             </div>
-            <span style={{ fontSize: 11, color: "#607080" }}>{open ? "▲" : "▼"}</span>
+            <span style={{ fontSize: 11, color: "var(--fg-dim)" }}>{open ? "▲" : "▼"}</span>
           </div>
-          <div style={{ fontSize: 13, color: "#e8f4fd", marginTop: 2, fontFamily: "Georgia, serif", fontWeight: 600 }}>
+          <div style={{ fontSize: 13, color: "var(--fg-primary)", marginTop: 2, fontFamily: "Georgia, serif", fontWeight: 600 }}>
             {current.resort_name && current.resort_name !== "Unknown Resort" ? current.resort_name : "Propriété"}
           </div>
-          <div style={{ fontSize: 10, color: "#607080", marginTop: 1 }}>
+          <div style={{ fontSize: 10, color: "var(--fg-dim)", marginTop: 1 }}>
             {fmt(current.price)} · {current.bedrooms}BR/{current.bathrooms}BA · Score {(current.investment_score || 0).toFixed(1)}/10
           </div>
         </div>
         <button onClick={() => go(1)}
-          style={{ background: "#0e1c2c", border: "1px solid #1a2535", color: "#a0b0c0", width: 32, height: 32, borderRadius: 8, cursor: "pointer", fontSize: 14 }}>▶</button>
+          style={{ background: "var(--bg-card)", border: "1px solid var(--bg-chip)", color: "var(--fg-secondary)", width: 32, height: 32, borderRadius: 8, cursor: "pointer", fontSize: 14 }}>▶</button>
       </div>
 
       {open && (
-        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: "#0a1624", border: "1px solid #2a9d8f44", borderRadius: 12, zIndex: 10, maxHeight: 360, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
+        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: "var(--bg-soft)", border: "1px solid #2a9d8f44", borderRadius: 12, zIndex: 10, maxHeight: 360, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
           {properties.map((p, i) => (
             <div key={p.id || i}
               onClick={() => { onSelect(i); setOpen(false); }}
-              style={{ padding: "10px 14px", borderBottom: "1px solid #0a1520", cursor: "pointer", background: i === selectedIdx ? "#0d2a1e" : "transparent" }}>
+              style={{ padding: "10px 14px", borderBottom: "1px solid var(--divider)", cursor: "pointer", background: i === selectedIdx ? "var(--bg-success)" : "transparent" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: 11, color: "#2a9d8f", fontWeight: 700 }}>#{p.rank}</span>
-                <span style={{ fontSize: 11, color: "#9ab0c0", fontFamily: "Georgia, serif" }}>{fmt(p.price)}</span>
+                <span style={{ fontSize: 11, color: "var(--fg-secondary)", fontFamily: "Georgia, serif" }}>{fmt(p.price)}</span>
               </div>
-              <div style={{ fontSize: 12, color: "#e8f4fd", marginTop: 2 }}>
+              <div style={{ fontSize: 12, color: "var(--fg-primary)", marginTop: 2 }}>
                 {p.resort_name && p.resort_name !== "Unknown Resort" ? p.resort_name : p.address.split(",")[0]}
               </div>
-              <div style={{ fontSize: 10, color: "#607080", marginTop: 1 }}>
+              <div style={{ fontSize: 10, color: "var(--fg-dim)", marginTop: 1 }}>
                 {p.bedrooms}BR · {p.property_type} · Score {(p.investment_score || 0).toFixed(1)}
                 {p.detail_is_new && <span style={{ color: "#ffd166", marginLeft: 6 }}>✨ NEW</span>}
               </div>
@@ -317,6 +317,33 @@ function PropertySelector(props) {
         </div>
       )}
     </div>
+  );
+}
+
+function ThemeToggle(props) {
+  const { theme, setTheme } = props;
+  const isDark = theme === "dark";
+  return (
+    <button
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+      title={isDark ? "Passer en thème clair" : "Passer en thème sombre"}
+      aria-label="Changer de thème"
+      style={{
+        background: "var(--bg-elevated)",
+        border: "1px solid var(--bg-chip)",
+        color: "var(--fg-secondary)",
+        width: 40,
+        height: 40,
+        borderRadius: 10,
+        cursor: "pointer",
+        fontSize: 16,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+      }}>
+      {isDark ? "☀️" : "🌙"}
+    </button>
   );
 }
 
@@ -335,7 +362,7 @@ function DiscoveryTab(props) {
       {strSignals.length > 0 && (
         <Card title="Signaux STR" accent="#52b788">
           {strSignals.map((s, i) => (
-            <div key={i} style={{ padding: "5px 0", fontSize: 12, color: "#9ab0c0" }}>• {s}</div>
+            <div key={i} style={{ padding: "5px 0", fontSize: 12, color: "var(--fg-secondary)" }}>• {s}</div>
           ))}
         </Card>
       )}
@@ -349,7 +376,7 @@ function DiscoveryTab(props) {
         )}
         <Row label="Prix / sqft" value={p.price_per_sqft ? fmt(p.price_per_sqft) : fmt(p.price / Math.max(p.square_feet, 1))} />
         {p.pool !== null && p.pool !== undefined && (
-          <Row label="Piscine" value={p.pool ? "Oui" : "Non"} color={p.pool ? "#52b788" : "#607080"} />
+          <Row label="Piscine" value={p.pool ? "Oui" : "Non"} color={p.pool ? "#52b788" : "var(--fg-dim)"} />
         )}
         {p.flood_risk && <Row label="Risque inondation" value={p.flood_risk} color={p.flood_risk === "minimal" ? "#52b788" : "#d4a017"} />}
         {p.parking && <Row label="Stationnement" value={p.parking} />}
@@ -374,7 +401,7 @@ function DiscoveryTab(props) {
 
       <Card title="HOA / Impôts fonciers" accent="#3d7fbf">
         <Row label="HOA mensuel" value={p.hoa_fee_monthly !== null && p.hoa_fee_monthly !== undefined ? fmt(p.hoa_fee_monthly) : "Non listé"}
-          color={p.hoa_fee_monthly > 500 ? "#e07070" : p.hoa_fee_monthly < 300 ? "#52b788" : "#9ab0c0"} />
+          color={p.hoa_fee_monthly > 500 ? "#e07070" : p.hoa_fee_monthly < 300 ? "#52b788" : "var(--fg-secondary)"} />
         {p.hoa_includes && p.hoa_includes.length > 0 && (
           <Row label="HOA inclut" value={p.hoa_includes.join(", ")} />
         )}
@@ -390,11 +417,11 @@ function DiscoveryTab(props) {
       </Card>
 
       {p.full_description && (
-        <Card title="Description complète" accent="#607080">
+        <Card title="Description complète" accent="var(--fg-dim)">
           <div onClick={() => setDescOpen(!descOpen)}
-            style={{ cursor: "pointer", fontSize: 12, color: "#7090a8", lineHeight: 1.6, maxHeight: descOpen ? "none" : 80, overflow: "hidden", position: "relative" }}>
+            style={{ cursor: "pointer", fontSize: 12, color: "var(--fg-muted)", lineHeight: 1.6, maxHeight: descOpen ? "none" : 80, overflow: "hidden", position: "relative" }}>
             {p.full_description}
-            {!descOpen && <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 30, background: "linear-gradient(transparent, #0e1c2c)" }} />}
+            {!descOpen && <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 30, background: "linear-gradient(transparent, var(--bg-card))" }} />}
           </div>
           <div onClick={() => setDescOpen(!descOpen)} style={{ textAlign: "center", fontSize: 11, color: "#2a9d8f", marginTop: 8, cursor: "pointer" }}>
             {descOpen ? "▲ Réduire" : "▼ Voir plus"}
@@ -403,9 +430,9 @@ function DiscoveryTab(props) {
       )}
 
       <Card title="Source de l'annonce" accent="#3d7fbf">
-        <div style={{ fontSize: 11, color: "#607080", marginBottom: 6 }}>{p.address}</div>
+        <div style={{ fontSize: 11, color: "var(--fg-dim)", marginBottom: 6 }}>{p.address}</div>
         <a href={p.listing_url} target="_blank" rel="noopener noreferrer"
-          style={{ display: "block", textAlign: "center", padding: "10px 14px", background: "#0d2a1e", border: "1px solid #2a9d8f", borderRadius: 8, color: "#2a9d8f", textDecoration: "none", fontSize: 13, fontWeight: 600 }}>
+          style={{ display: "block", textAlign: "center", padding: "10px 14px", background: "var(--bg-success)", border: "1px solid #2a9d8f", borderRadius: 8, color: "#2a9d8f", textDecoration: "none", fontSize: 13, fontWeight: 600 }}>
           🌐 Voir l'annonce Realtor.com ↗
         </a>
       </Card>
@@ -422,6 +449,19 @@ export default function App() {
     const saved = parseInt(localStorage.getItem(SELECTED_RANK_STORAGE_KEY) || "0", 10);
     return isNaN(saved) ? 0 : saved;
   });
+
+  // Theme (light = default). Initialised from the data-theme attribute
+  // that the pre-mount script already set, so we stay in sync.
+  const [theme, setTheme] = useState(() => {
+    if (typeof document !== "undefined") {
+      return document.documentElement.getAttribute("data-theme") || "light";
+    }
+    return "light";
+  });
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    try { localStorage.setItem("theme", theme); } catch (e) {}
+  }, [theme]);
 
   useEffect(() => {
     fetch(SCORED_PROPERTIES_URL)
@@ -508,7 +548,7 @@ export default function App() {
 
   const isPos = base.cfNet >= 0;
   const cfColor = isPos ? "#52b788" : "#e07070";
-  const heroBg = isPos ? "#0d2a1e" : "#2a0d0d";
+  const heroBg = isPos ? "var(--bg-success)" : "var(--bg-danger)";
 
   const tabs = [
     ["decouverte","Découverte"],["horizon","Horizon"],["mensuel","Mensuel"],["frais","Frais"],
@@ -519,18 +559,18 @@ export default function App() {
   const crossoverYear = timeline.findIndex((d) => d.avantageSurETF > 0) + 1;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#060e18", padding: "18px 14px", fontFamily: "system-ui, sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "var(--bg-app)", padding: "18px 14px", fontFamily: "system-ui, sans-serif" }}>
 
       <div style={{ textAlign: "center", marginBottom: 14 }}>
         <div style={{ fontSize: 10, letterSpacing: "0.2em", color: "#2a9d8f", textTransform: "uppercase", marginBottom: 4 }}>Analyse d'investissement</div>
-        <h1 style={{ fontFamily: "Georgia, serif", fontSize: 22, color: "#e8f4fd", margin: 0 }}>
+        <h1 style={{ fontFamily: "Georgia, serif", fontSize: 22, color: "var(--fg-primary)", margin: 0 }}>
           {selectedProp
             ? (selectedProp.resort_name && selectedProp.resort_name !== "Unknown Resort"
                 ? selectedProp.resort_name
                 : (selectedProp.address || "").split(",")[0])
             : "Orlando STR"}
         </h1>
-        <div style={{ fontSize: 11, color: "#405060", marginTop: 3 }}>
+        <div style={{ fontSize: 11, color: "var(--fg-faint)", marginTop: 3 }}>
           {selectedProp ? (selectedProp.address || "").split(",").slice(1).join(",").trim() : "Kissimmee / Davenport / I-Drive"}
           {" · Investisseur Québécois · T776 + Frais FL"}
         </div>
@@ -538,22 +578,34 @@ export default function App() {
 
       {/* Property selector — only shown if data loaded */}
       {loadError && (
-        <div style={{ background: "#2a0d0d", border: "1px solid #e0707044", borderRadius: 12, padding: 14, marginBottom: 14, textAlign: "center" }}>
+        <div style={{ background: "var(--bg-danger)", border: "1px solid #e0707044", borderRadius: 12, padding: 14, marginBottom: 14, textAlign: "center" }}>
           <div style={{ fontSize: 12, color: "#e07070", marginBottom: 4 }}>⚠️ Aucune donnée de recherche trouvée</div>
-          <div style={{ fontSize: 11, color: "#7090a8", lineHeight: 1.6 }}>
-            Exécute d'abord <code style={{ background: "#0a1624", padding: "1px 6px", borderRadius: 3, color: "#a0b0c0" }}>python3 src/property_finder.py</code> pour générer <code style={{ background: "#0a1624", padding: "1px 6px", borderRadius: 3, color: "#a0b0c0" }}>cache/scored_properties.json</code>
+          <div style={{ fontSize: 11, color: "var(--fg-muted)", lineHeight: 1.6 }}>
+            Exécute d'abord <code style={{ background: "var(--bg-soft)", padding: "1px 6px", borderRadius: 3, color: "var(--fg-secondary)" }}>python3 src/property_finder.py</code> pour générer <code style={{ background: "var(--bg-soft)", padding: "1px 6px", borderRadius: 3, color: "var(--fg-secondary)" }}>cache/scored_properties.json</code>
           </div>
         </div>
       )}
       {properties.length > 0 && (
-        <PropertySelector properties={properties} selectedIdx={selectedIdx} onSelect={setSelectedIdx} />
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <PropertySelector properties={properties} selectedIdx={selectedIdx} onSelect={setSelectedIdx} />
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <ThemeToggle theme={theme} setTheme={setTheme} />
+          </div>
+        </div>
+      )}
+      {properties.length === 0 && !loadError && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
+          <ThemeToggle theme={theme} setTheme={setTheme} />
+        </div>
       )}
 
       {/* Tab nav */}
       <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
         {tabs.map((item) => (
           <button key={item[0]} onClick={() => setTab(item[0])}
-            style={{ padding: "4px 12px", borderRadius: 20, border: tab === item[0] ? "1px solid #2a9d8f" : "1px solid #1a2535", background: tab === item[0] ? "#0d2a1e" : "transparent", color: tab === item[0] ? "#2a9d8f" : "#405060", fontSize: 11, cursor: "pointer" }}>
+            style={{ padding: "4px 12px", borderRadius: 20, border: tab === item[0] ? "1px solid #2a9d8f" : "1px solid var(--bg-chip)", background: tab === item[0] ? "var(--bg-success)" : "transparent", color: tab === item[0] ? "#2a9d8f" : "var(--fg-faint)", fontSize: 11, cursor: "pointer" }}>
             {item[1]}
           </button>
         ))}
@@ -565,13 +617,13 @@ export default function App() {
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: cfColor, marginBottom: 3 }}>Cash Flow/mois</div>
             <div style={{ fontSize: 28, fontFamily: "Georgia, serif", fontWeight: 700, color: cfColor }}>{fmt(base.cfNet)}</div>
-            <div style={{ fontSize: 10, color: "#405060" }}>{fmt(base.cfNet * USD_TO_CAD, "CAD")}</div>
+            <div style={{ fontSize: 10, color: "var(--fg-faint)" }}>{fmt(base.cfNet * USD_TO_CAD, "CAD")}</div>
           </div>
-          <div style={{ width: 1, height: 60, background: "#1a2535" }} />
+          <div style={{ width: 1, height: 60, background: "var(--bg-chip)" }} />
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#52b788", marginBottom: 3 }}>{"ROI an " + horizon + " (revente)"}</div>
             <div style={{ fontSize: 28, fontFamily: "Georgia, serif", fontWeight: 700, color: sel.roi >= 0 ? "#52b788" : "#e07070" }}>{pct(sel.roi)}</div>
-            <div style={{ fontSize: 10, color: "#405060" }}>{pct(sel.roiAnnualise) + " annualise"}</div>
+            <div style={{ fontSize: 10, color: "var(--fg-faint)" }}>{pct(sel.roiAnnualise) + " annualise"}</div>
           </div>
         </div>
         <div style={{ display: "flex", justifyContent: "center", gap: 20, marginTop: 12 }}>
@@ -581,8 +633,8 @@ export default function App() {
             ["vs ETF", sel.avantageSurETF >= 0 ? "+" + fmt(sel.avantageSurETF, "CAD") : fmt(sel.avantageSurETF, "CAD")]
           ].map((item) => (
             <div key={item[0]} style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 12, fontFamily: "Georgia, serif", color: "#a0c0d8", fontWeight: 600 }}>{item[1]}</div>
-              <div style={{ fontSize: 10, color: "#405060" }}>{item[0]}</div>
+              <div style={{ fontSize: 12, fontFamily: "Georgia, serif", color: "var(--fg-primary-alt)", fontWeight: 600 }}>{item[1]}</div>
+              <div style={{ fontSize: 10, color: "var(--fg-faint)" }}>{item[0]}</div>
             </div>
           ))}
         </div>
@@ -619,9 +671,9 @@ export default function App() {
       )}
       {tab === "decouverte" && !selectedProp && (
         <Card title="Aucune propriété chargée" accent="#e07070">
-          <div style={{ fontSize: 12, color: "#7090a8", lineHeight: 1.8 }}>
+          <div style={{ fontSize: 12, color: "var(--fg-muted)", lineHeight: 1.8 }}>
             La cache de recherche est vide. Exécute le script Python d'abord :
-            <div style={{ background: "#0a1624", padding: "8px 10px", borderRadius: 6, marginTop: 8, fontFamily: "monospace", fontSize: 11, color: "#a0b0c0" }}>
+            <div style={{ background: "var(--bg-soft)", padding: "8px 10px", borderRadius: 6, marginTop: 8, fontFamily: "monospace", fontSize: 11, color: "var(--fg-secondary)" }}>
               python3 src/property_finder.py
             </div>
           </div>
@@ -637,7 +689,7 @@ export default function App() {
               sublabel={crossoverYear > 0 ? "Immo depasse ETF a partir de l'an " + crossoverYear : "Immo toujours en avance"} />
           </Card>
 
-          <div style={{ background: "#0e1c2c", border: "1px solid #2a9d8f44", borderRadius: 14, padding: "16px 18px", marginBottom: 12 }}>
+          <div style={{ background: "var(--bg-card)", border: "1px solid #2a9d8f44", borderRadius: 14, padding: "16px 18px", marginBottom: 12 }}>
             <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: "#2a9d8f", marginBottom: 10, fontWeight: 600 }}>Gain net CAD — Immo vs ETF</div>
             <MiniChart data={timeline} selectedYear={horizon} />
             <div style={{ display: "flex", justifyContent: "center", gap: 20, marginTop: 8 }}>
@@ -685,18 +737,18 @@ export default function App() {
               value={fmt(Math.abs(sel.avantageSurETF), "CAD")}
               highlight color={sel.avantageSurETF >= 0 ? "#52b788" : "#3d7fbf"} />
             {crossoverYear > 0 && crossoverYear <= 20 && (
-              <div style={{ fontSize: 11, color: "#607080", marginTop: 8, lineHeight: 1.6 }}>
+              <div style={{ fontSize: 11, color: "var(--fg-dim)", marginTop: 8, lineHeight: 1.6 }}>
                 L'immobilier devient plus avantageux que l'ETF a partir de l'an {crossoverYear} avec les parametres actuels.
               </div>
             )}
           </Card>
 
-          <Card title="Tableau annee par annee" accent="#607080">
+          <Card title="Tableau annee par annee" accent="var(--fg-dim)">
             <div style={{ display: "grid", gridTemplateColumns: "0.6fr 1fr 1fr 1fr", gap: 2, marginBottom: 6 }}>
-              <span style={{ fontSize: 10, color: "#405060" }}>An</span>
+              <span style={{ fontSize: 10, color: "var(--fg-faint)" }}>An</span>
               <span style={{ fontSize: 10, color: "#52b788", textAlign: "right" }}>Gain immo CAD</span>
               <span style={{ fontSize: 10, color: "#3d7fbf", textAlign: "right" }}>Gain ETF CAD</span>
-              <span style={{ fontSize: 10, color: "#a0b0c0", textAlign: "right" }}>Avantage</span>
+              <span style={{ fontSize: 10, color: "var(--fg-secondary)", textAlign: "right" }}>Avantage</span>
             </div>
             {timeline.map((d) => {
               const isSelected = d.annees === horizon;
@@ -705,8 +757,8 @@ export default function App() {
               return (
                 <div key={d.annees}
                   onClick={() => setHorizon(d.annees)}
-                  style={{ display: "grid", gridTemplateColumns: "0.6fr 1fr 1fr 1fr", padding: "5px 0", borderBottom: "1px solid #0a1520", background: isSelected ? "#0d2a1e" : "transparent", cursor: "pointer", borderRadius: 4 }}>
-                  <span style={{ fontSize: 12, color: isSelected ? "#2a9d8f" : "#607080", fontWeight: isSelected ? 700 : 400 }}>{"An " + d.annees}</span>
+                  style={{ display: "grid", gridTemplateColumns: "0.6fr 1fr 1fr 1fr", padding: "5px 0", borderBottom: "1px solid var(--divider)", background: isSelected ? "var(--bg-success)" : "transparent", cursor: "pointer", borderRadius: 4 }}>
+                  <span style={{ fontSize: 12, color: isSelected ? "#2a9d8f" : "var(--fg-dim)", fontWeight: isSelected ? 700 : 400 }}>{"An " + d.annees}</span>
                   <span style={{ fontSize: 12, color: "#52b788", fontFamily: "Georgia, serif", textAlign: "right" }}>{fmt(immoGain, "CAD")}</span>
                   <span style={{ fontSize: 12, color: "#3d7fbf", fontFamily: "Georgia, serif", textAlign: "right" }}>{fmt(d.gainNetETF, "CAD")}</span>
                   <span style={{ fontSize: 12, color: avantage >= 0 ? "#52b788" : "#3d7fbf", fontFamily: "Georgia, serif", textAlign: "right" }}>{avantage >= 0 ? "+" : ""}{fmt(avantage, "CAD")}</span>
@@ -745,7 +797,7 @@ export default function App() {
             <Row label="Impot net Canada/QC" value={fmt(base.impotCAD, "CAD")} highlight color="#d4a017" />
             <Row label="Impact mensuel USD" value={"-" + fmt(base.impotCAD / 12 / USD_TO_CAD)} color="#e07070" />
           </Card>
-          <div style={{ background: "#0d1e30", border: "1px solid #2a9d8f22", borderRadius: 14, padding: 14, marginBottom: 12 }}>
+          <div style={{ background: "var(--bg-elevated)", border: "1px solid #2a9d8f22", borderRadius: 14, padding: 14, marginBottom: 12 }}>
             <Gauge label="Charges totales / Revenus" value={base.chargesOp + base.hypo} max={base.revNet} color="#e07070" />
             <Gauge label="Occupation seuil rentabilite" value={(base.chargesOp + base.hypo) / revBruts * 100} max={100} color="#d4a017" />
           </div>
@@ -787,7 +839,7 @@ export default function App() {
             <Row label="Charges operationnelles" value={"-" + fmt(base.chargesAn)} color="#e07070" />
             <Row label="Interets hypothecaires" value={"-" + fmt(base.interets)} color="#e07070" />
             <Row label="Amortissement (27.5 ans)" value={"-" + fmt(base.amortUS)} color="#e07070" sub="Deduction papier" />
-            <Row label="Revenu imposable US" value={fmt(base.imposUS)} highlight color={base.imposUS <= 0 ? "#52b788" : "#e8f4fd"} />
+            <Row label="Revenu imposable US" value={fmt(base.imposUS)} highlight color={base.imposUS <= 0 ? "#52b788" : "var(--fg-primary)"} />
             <Row label="Impot IRS (~22%)" value={fmt(base.impotUS)} color={base.impotUS < 500 ? "#52b788" : "#d4a017"} />
           </Card>
           <Card title="CRA + Revenu Quebec — T776" accent="#d4a017">
@@ -799,7 +851,7 @@ export default function App() {
             <Row label="Credit T2209" value={"-" + fmt(base.creditT2209, "CAD")} color="#52b788" />
             <Row label="Impot net annuel" value={fmt(base.impotCAD, "CAD")} highlight color="#d4a017" />
           </Card>
-          <Card title="Formulaires obligatoires" accent="#607080">
+          <Card title="Formulaires obligatoires" accent="var(--fg-dim)">
             <Row label="W-8ECI" value="Obligatoire" sub="Impose sur revenu net — a faire en premier" color="#52b788" />
             <Row label="1040-NR" value="Annuel" sub="Declaration IRS non-resident" />
             <Row label="T776" value="Annuel" sub="Revenus de location CRA" />
@@ -819,13 +871,13 @@ export default function App() {
       {/* ETF */}
       {tab === "etf" && (
         <div>
-          <div style={{ background: "#0d1e2c", border: "1px solid #3d7fbf33", borderRadius: 14, padding: 14, marginBottom: 12 }}>
+          <div style={{ background: "var(--bg-elevated)", border: "1px solid #3d7fbf33", borderRadius: 14, padding: 14, marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: "#3d7fbf", marginBottom: 6 }}>Scenario alternatif — ETF {rendementETF}%/an</div>
-            <div style={{ fontSize: 12, color: "#7090a8", lineHeight: 1.7 }}>
+            <div style={{ fontSize: 12, color: "var(--fg-muted)", lineHeight: 1.7 }}>
               Meme capital de depart ({fmt(base.coutEntree * USD_TO_CAD, "CAD")} CAD) place en ETF. Impot gain capital canadien inclus (inclusion 50% x taux marginal).
             </div>
           </div>
-          <Card title="Comparaison complete" accent="#607080">
+          <Card title="Comparaison complete" accent="var(--fg-dim)">
             <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", gap: 4, marginBottom: 8 }}>
               <span />
               <span style={{ fontSize: 11, color: "#3d7fbf", textAlign: "right", fontWeight: 600 }}>ETF</span>
@@ -840,15 +892,15 @@ export default function App() {
               ["Gain net " + horizon + " ans CAD", fmt(sel.gainNetETF, "CAD"), fmt(sel.gainNet * USD_TO_CAD, "CAD")],
               ["ROI ann. " + horizon + " ans", pct(sel.roiETFAnnualise), pct(sel.roiAnnualise)],
             ].map((row) => (
-              <div key={row[0]} style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", padding: "6px 0", borderBottom: "1px solid #0a1520" }}>
-                <span style={{ fontSize: 12, color: "#7090a8" }}>{row[0]}</span>
+              <div key={row[0]} style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", padding: "6px 0", borderBottom: "1px solid var(--divider)" }}>
+                <span style={{ fontSize: 12, color: "var(--fg-muted)" }}>{row[0]}</span>
                 <span style={{ fontSize: 12, color: "#3d7fbf", fontFamily: "Georgia, serif", textAlign: "right" }}>{row[1]}</span>
                 <span style={{ fontSize: 12, color: "#52b788", fontFamily: "Georgia, serif", textAlign: "right" }}>{row[2]}</span>
               </div>
             ))}
           </Card>
-          <Card title="Avantages non quantifies" accent="#607080">
-            <div style={{ fontSize: 12, color: "#7090a8", lineHeight: 1.9 }}>
+          <Card title="Avantages non quantifies" accent="var(--fg-dim)">
+            <div style={{ fontSize: 12, color: "var(--fg-muted)", lineHeight: 1.9 }}>
               <div style={{ color: "#52b788", marginBottom: 4 }}>Avantages immobilier :</div>
               <div>Levier — appreciation sur valeur totale, pas juste ta mise</div>
               <div>Pied-a-terre garantia Orlando pour usage perso</div>
@@ -866,18 +918,18 @@ export default function App() {
 
       {tab === "canada" && (
         <div>
-          <div style={{ background: "#0d1e2c", border: "1px solid #d4a01733", borderRadius: 14, padding: 14, marginBottom: 12 }}>
+          <div style={{ background: "var(--bg-elevated)", border: "1px solid #d4a01733", borderRadius: 14, padding: 14, marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: "#d4a017", marginBottom: 6 }}>Strategie emprunt canadien</div>
-            <div style={{ fontSize: 12, color: "#7090a8", lineHeight: 1.7 }}>
+            <div style={{ fontSize: 12, color: "var(--fg-muted)", lineHeight: 1.7 }}>
               Emprunter via HELOC ou refinancement sur ta residence canadienne pour financer la mise de fonds ou reduire le recours au pret US non-warrantable. Les interets sont deductibles sur le T776 canadien.
             </div>
           </div>
 
           <Card title="Activer le scenario emprunt canadien" accent="#d4a017">
             <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", marginBottom: 10 }}>
-              <div style={{ fontSize: 13, color: "#7090a8", flex: 1 }}>Inclure un emprunt canadien (HELOC / refi)</div>
+              <div style={{ fontSize: 13, color: "var(--fg-muted)", flex: 1 }}>Inclure un emprunt canadien (HELOC / refi)</div>
               <button onClick={() => setCanadaActive(!canadaActive)}
-                style={{ padding: "6px 18px", borderRadius: 20, border: "1px solid " + (canadaActive ? "#d4a017" : "#1a2535"), background: canadaActive ? "#d4a01722" : "transparent", color: canadaActive ? "#d4a017" : "#405060", cursor: "pointer", fontSize: 12 }}>
+                style={{ padding: "6px 18px", borderRadius: 20, border: "1px solid " + (canadaActive ? "#d4a017" : "var(--bg-chip)"), background: canadaActive ? "#d4a01722" : "transparent", color: canadaActive ? "#d4a017" : "var(--fg-faint)", cursor: "pointer", fontSize: 12 }}>
                 {canadaActive ? "Actif" : "Inactif"}
               </button>
             </div>
@@ -902,9 +954,9 @@ export default function App() {
               </Card>
 
               <Card title="Avantages fiscaux — T776 Canada" accent="#52b788">
-                <div style={{ background: "#0d2010", borderRadius: 8, padding: "9px 12px", marginBottom: 10 }}>
+                <div style={{ background: "var(--bg-success-deep)", borderRadius: 8, padding: "9px 12px", marginBottom: 10 }}>
                   <div style={{ fontSize: 10, color: "#52b788", marginBottom: 3 }}>Deduction possible sur T776</div>
-                  <div style={{ fontSize: 11, color: "#607080" }}>Les interets sur un emprunt canadien utilise pour investir sont deductibles au Canada — ce qui reduit ton revenu imposable QC.</div>
+                  <div style={{ fontSize: 11, color: "var(--fg-dim)" }}>Les interets sur un emprunt canadien utilise pour investir sont deductibles au Canada — ce qui reduit ton revenu imposable QC.</div>
                 </div>
                 <Row label="Interets annuels HELOC (CAD)" value={fmt(base.canadaInteretsAnnuel, "CAD")} color="#52b788" info="T776" />
                 <Row label="Economie impot QC estimee" value={fmt(base.canadaInteretsAnnuel * base.txMarg, "CAD")} color="#52b788"
@@ -921,7 +973,7 @@ export default function App() {
                   sub="Cout entree - emprunt CA" />
               </Card>
 
-              <Card title="Comparaison des deux structures" accent="#607080">
+              <Card title="Comparaison des deux structures" accent="var(--fg-dim)">
                 <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr", gap: 4, marginBottom: 8 }}>
                   <span />
                   <span style={{ fontSize: 11, color: "#3d7fbf", textAlign: "right", fontWeight: 600 }}>Sans CA</span>
@@ -934,8 +986,8 @@ export default function App() {
                   ["Deduction T776 CA/an", fmt(base.interetsCAD, "CAD"), fmt(base.interetsCAD + base.canadaInteretsAnnuel, "CAD")],
                   ["Impot QC economise", fmt(base.creditT2209, "CAD"), fmt(base.creditT2209 + base.canadaInteretsAnnuel * base.txMarg, "CAD")],
                 ].map((row) => (
-                  <div key={row[0]} style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr", padding: "6px 0", borderBottom: "1px solid #0a1520" }}>
-                    <span style={{ fontSize: 12, color: "#7090a8" }}>{row[0]}</span>
+                  <div key={row[0]} style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr", padding: "6px 0", borderBottom: "1px solid var(--divider)" }}>
+                    <span style={{ fontSize: 12, color: "var(--fg-muted)" }}>{row[0]}</span>
                     <span style={{ fontSize: 12, color: "#3d7fbf", fontFamily: "Georgia, serif", textAlign: "right" }}>{row[1]}</span>
                     <span style={{ fontSize: 12, color: "#d4a017", fontFamily: "Georgia, serif", textAlign: "right" }}>{row[2]}</span>
                   </div>
@@ -943,7 +995,7 @@ export default function App() {
               </Card>
 
               <Card title="Points d attention" accent="#e07070">
-                <div style={{ fontSize: 12, color: "#7090a8", lineHeight: 1.9 }}>
+                <div style={{ fontSize: 12, color: "var(--fg-muted)", lineHeight: 1.9 }}>
                   <div>Ta residence canadienne est donnee en garantie — risque si difficultes</div>
                   <div>Taux HELOC variable — si prime monte, ton cash flow se degrade</div>
                   <div>La CRA exige une traçabilite claire de l utilisation des fonds</div>
@@ -955,11 +1007,11 @@ export default function App() {
         </div>
       )}
 
-      <div style={{ textAlign: "center", fontSize: 10, color: "#2a3a4a", marginTop: 8, lineHeight: 1.7 }}>
+      <div style={{ textAlign: "center", fontSize: 10, color: "var(--axis)", marginTop: 8, lineHeight: 1.7 }}>
         Modèle indicatif · 1 USD = 1.38 CAD · T776 intérêts déduits · Frais FL 2026
         <br />Consulte un CPA transfrontalier CA/US
         {meta && (
-          <div style={{ marginTop: 6, fontSize: 9, color: "#1f2a38" }}>
+          <div style={{ marginTop: 6, fontSize: 9, color: "var(--border)" }}>
             Données générées {new Date(meta.generated_at).toLocaleString("fr-CA")} · {properties.length} propriétés
             {meta.local_mode ? " · mode LOCAL" : " · " + (meta.total_api_calls || 0) + " appels API"}
             {" · navigation clavier : ◀ ▶ ou 1–9"}
