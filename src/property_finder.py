@@ -1113,7 +1113,8 @@ class EnhancedPropertyDiscoveryAgent:
         return list_calls + detail_calls
 
     def get_top_str_properties(self, limit: int = 20,
-                               require_explicit_signals: bool = False) -> List[Dict]:
+                               require_explicit_signals: bool = False,
+                               max_per_resort: int = 3) -> List[Dict]:
         """Get top N properties by STR investment score.
 
         Returns all ranked properties up to limit — no score threshold,
@@ -1122,15 +1123,32 @@ class EnhancedPropertyDiscoveryAgent:
         When ``require_explicit_signals`` is True, drop properties whose
         only STR signal is the zip-code fallback (i.e. keep only those
         with explicit listing keywords or a known resort match).
+
+        ``max_per_resort`` caps how many properties from the same named
+        resort appear in the result (defaults to 3). Properties without a
+        recognized resort ("Unknown Resort" / empty) are not capped, since
+        they represent distinct standalone listings.
         """
         pool = self.discovered_properties
         if require_explicit_signals:
             pool = [p for p in pool if self._has_explicit_str_signals(p)]
+        if max_per_resort and max_per_resort > 0:
+            seen: Dict[str, int] = {}
+            capped: List[Dict] = []
+            for p in pool:
+                resort = (p.get('resort_name') or '').strip()
+                if resort and resort != 'Unknown Resort':
+                    if seen.get(resort, 0) >= max_per_resort:
+                        continue
+                    seen[resort] = seen.get(resort, 0) + 1
+                capped.append(p)
+            pool = capped
         return list(pool[:limit])
 
     def export_scored_properties(self, limit: int = 20,
                                   output_path: str = None,
-                                  require_explicit_signals: bool = True) -> str:
+                                  require_explicit_signals: bool = True,
+                                  max_per_resort: int = 3) -> str:
         """Write the top-N ranked properties to cache/scored_properties.json.
 
         This file is consumed by property_finance.html (the web-based
@@ -1150,7 +1168,8 @@ class EnhancedPropertyDiscoveryAgent:
             )
 
         top = self.get_top_str_properties(
-            limit, require_explicit_signals=require_explicit_signals
+            limit, require_explicit_signals=require_explicit_signals,
+            max_per_resort=max_per_resort,
         )
         if require_explicit_signals:
             dropped = sum(
