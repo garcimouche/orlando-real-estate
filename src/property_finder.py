@@ -1166,6 +1166,19 @@ class EnhancedPropertyDiscoveryAgent:
             output_path = os.path.join(
                 os.path.dirname(__file__), '..', 'cache', 'scored_properties.json'
             )
+        last_run_path = os.path.join(
+            os.path.dirname(output_path), 'last_run_ids.json'
+        )
+
+        # Load previous run snapshot (used to compute run-over-run delta).
+        # Missing file = first run; we won't flag anything as new.
+        previous_snapshot = None
+        if os.path.exists(last_run_path):
+            try:
+                with open(last_run_path) as f:
+                    previous_snapshot = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                previous_snapshot = None
 
         top = self.get_top_str_properties(
             limit, require_explicit_signals=require_explicit_signals,
@@ -1181,11 +1194,21 @@ class EnhancedPropertyDiscoveryAgent:
                     f"Export filter: dropped {dropped} zip-only matches "
                     f"(kept {len(top)} with explicit STR signals)"
                 )
+        previous_ids = set((previous_snapshot or {}).get('ids', []))
+        previous_entries = (previous_snapshot or {}).get('entries', [])
+        previous_by_id = {e['id']: e for e in previous_entries if e.get('id')}
+        current_ids = {p.get('id') for p in top if p.get('id')}
+
         export = []
         for rank, prop in enumerate(top, 1):
             rev = self._estimate_str_revenue(prop)
+            pid = prop.get('id')
+            is_new_this_run = bool(
+                previous_snapshot is not None and pid and pid not in previous_ids
+            )
             export.append({
                 'rank': rank,
+                'is_new_this_run': is_new_this_run,
                 # Core identity
                 'id': prop.get('id'),
                 'address': prop.get('address'),
@@ -1239,6 +1262,19 @@ class EnhancedPropertyDiscoveryAgent:
                 'estimated_monthly_cashflow': prop.get('estimated_monthly_cashflow'),
             })
 
+        dropped = []
+        if previous_snapshot is not None:
+            for prev in previous_entries:
+                if prev.get('id') and prev['id'] not in current_ids:
+                    dropped.append({
+                        'id': prev.get('id'),
+                        'address': prev.get('address'),
+                        'resort_name': prev.get('resort_name'),
+                        'previous_rank': prev.get('rank'),
+                    })
+
+        new_count = sum(1 for p in export if p['is_new_this_run'])
+
         payload = {
             'generated_at': datetime.now(timezone.utc).isoformat(),
             'total_api_calls': self.total_api_calls,
@@ -1246,13 +1282,38 @@ class EnhancedPropertyDiscoveryAgent:
             'new_badge_window_days': int(os.getenv('NEW_BADGE_WINDOW_DAYS', 7)),
             'count': len(export),
             'properties': export,
+            'previous_run_at': (previous_snapshot or {}).get('generated_at'),
+            'has_baseline': previous_snapshot is not None,
+            'new_this_run_count': new_count,
+            'dropped': dropped,
+            'dropped_count': len(dropped),
         }
 
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         with open(output_path, 'w') as f:
             json.dump(payload, f, indent=2, default=str)
 
-        self.logger.info(f"Exported {len(export)} scored properties to {output_path}")
+        # Persist this run's snapshot for next run's delta.
+        snapshot = {
+            'generated_at': payload['generated_at'],
+            'ids': sorted(i for i in current_ids if i),
+            'entries': [
+                {
+                    'id': p['id'],
+                    'address': p['address'],
+                    'resort_name': p['resort_name'],
+                    'rank': p['rank'],
+                }
+                for p in export if p.get('id')
+            ],
+        }
+        with open(last_run_path, 'w') as f:
+            json.dump(snapshot, f, indent=2, default=str)
+
+        self.logger.info(
+            f"Exported {len(export)} scored properties to {output_path} "
+            f"(new this run: {new_count}, dropped: {len(dropped)})"
+        )
         return output_path
 
     def _extract_zip_from_address(self, address: str) -> Optional[str]:

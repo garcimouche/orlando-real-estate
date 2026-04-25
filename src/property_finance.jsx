@@ -253,6 +253,73 @@ function MiniChart(props) {
   );
 }
 
+function RunDeltaBanner(props) {
+  const { meta, properties, onSelect } = props;
+  if (!meta) return null;
+  const newCount = meta.new_this_run_count || 0;
+  const droppedCount = meta.dropped_count || 0;
+
+  // Premier suivi — pas de baseline pour comparer.
+  if (!meta.has_baseline) {
+    return (
+      <div style={{ background: "var(--bg-soft)", border: "1px dashed var(--bg-chip)", borderRadius: 12, padding: "10px 14px", marginBottom: 10, fontSize: 11, color: "var(--fg-dim)", textAlign: "center" }}>
+        Premier suivi enregistré — les changements vs run précédent apparaîtront au prochain <code style={{ color: "var(--fg-secondary)" }}>property_finder.py</code>.
+      </div>
+    );
+  }
+
+  // Aucun changement.
+  if (newCount === 0 && droppedCount === 0) {
+    return (
+      <div style={{ background: "var(--bg-soft)", border: "1px solid var(--bg-chip)", borderRadius: 12, padding: "8px 14px", marginBottom: 10, fontSize: 11, color: "var(--fg-dim)", textAlign: "center" }}>
+        Aucun changement depuis le run précédent ({fmtRunDate(meta.previous_run_at)}).
+      </div>
+    );
+  }
+
+  const newProps = properties.filter(p => p.is_new_this_run);
+  const accent = "#2a9d8f";
+
+  return (
+    <div style={{ background: "linear-gradient(135deg, #2a9d8f1f, #2a9d8f0a)", border: "1px solid " + accent + "66", borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: accent, letterSpacing: "0.04em" }}>
+          {newCount > 0 && <>✨ {newCount} nouvelle{newCount > 1 ? "s" : ""} propriété{newCount > 1 ? "s" : ""}</>}
+          {newCount > 0 && droppedCount > 0 && <span style={{ color: "var(--fg-dim)", fontWeight: 400 }}>  ·  </span>}
+          {droppedCount > 0 && <span style={{ color: "var(--fg-secondary)", fontWeight: 600 }}>{droppedCount} disparue{droppedCount > 1 ? "s" : ""}</span>}
+        </div>
+        <div style={{ fontSize: 10, color: "var(--fg-dim)" }}>vs {fmtRunDate(meta.previous_run_at)}</div>
+      </div>
+      {newProps.length > 0 && (
+        <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {newProps.map(p => (
+            <button key={p.id}
+              onClick={() => onSelect(properties.findIndex(x => x.id === p.id))}
+              title={p.address}
+              style={{ background: accent, color: "#0a3d2c", border: "none", borderRadius: 6, padding: "3px 8px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+              #{p.rank} · {p.resort_name && p.resort_name !== "Unknown Resort" ? p.resort_name : (p.address || "").split(",")[0]}
+            </button>
+          ))}
+        </div>
+      )}
+      {meta.dropped && meta.dropped.length > 0 && (
+        <div style={{ marginTop: droppedCount > 0 && newProps.length > 0 ? 6 : 8, fontSize: 10, color: "var(--fg-dim)" }}>
+          Disparues : {meta.dropped.slice(0, 5).map(d => (d.resort_name && d.resort_name !== "Unknown Resort" ? d.resort_name : (d.address || "").split(",")[0])).join(" · ")}
+          {meta.dropped.length > 5 && <> · +{meta.dropped.length - 5}</>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function fmtRunDate(iso) {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString("fr-CA", { month: "short", day: "numeric" });
+  } catch (e) { return iso; }
+}
+
 function PropertySelector(props) {
   const { properties, selectedIdx, onSelect } = props;
   const [open, setOpen] = useState(false);
@@ -275,8 +342,8 @@ function PropertySelector(props) {
               <span style={{ fontSize: 10, letterSpacing: "0.15em", color: "#2a9d8f", textTransform: "uppercase", fontWeight: 600 }}>
                 #{current.rank} / {properties.length}
               </span>
-              {current.detail_is_new && (
-                <span style={{ marginLeft: 8, fontSize: 9, color: "#ffd166", background: "var(--bg-warning)", padding: "1px 6px", borderRadius: 8, letterSpacing: "0.1em", fontWeight: 700 }}>✨ NEW</span>
+              {current.is_new_this_run && (
+                <span style={{ marginLeft: 8, fontSize: 10, color: "#0a3d2c", background: "#2a9d8f", padding: "2px 8px", borderRadius: 8, letterSpacing: "0.12em", fontWeight: 800 }}>✨ NOUVEAU</span>
               )}
               {current.is_price_reduced && (
                 <span style={{ marginLeft: 6, fontSize: 9, color: "#e07070", background: "var(--bg-danger-deep)", padding: "1px 6px", borderRadius: 8, letterSpacing: "0.1em", fontWeight: 700 }}>↓ PRICE</span>
@@ -297,23 +364,35 @@ function PropertySelector(props) {
 
       {open && (
         <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: "var(--bg-soft)", border: "1px solid #2a9d8f44", borderRadius: 12, zIndex: 10, maxHeight: 360, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
-          {properties.map((p, i) => (
-            <div key={p.id || i}
-              onClick={() => { onSelect(i); setOpen(false); }}
-              style={{ padding: "10px 14px", borderBottom: "1px solid var(--divider)", cursor: "pointer", background: i === selectedIdx ? "var(--bg-success)" : "transparent" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 11, color: "#2a9d8f", fontWeight: 700 }}>#{p.rank}</span>
-                <span style={{ fontSize: 11, color: "var(--fg-secondary)", fontFamily: "Georgia, serif" }}>{fmt(p.price)}</span>
+          {properties.map((p, i) => {
+            const isNew = !!p.is_new_this_run;
+            const isSelected = i === selectedIdx;
+            const rowBg = isNew
+              ? (isSelected ? "#2a9d8f33" : "#2a9d8f1f")
+              : (isSelected ? "var(--bg-success)" : "transparent");
+            const leftBorder = isNew ? "3px solid #2a9d8f" : "3px solid transparent";
+            return (
+              <div key={p.id || i}
+                onClick={() => { onSelect(i); setOpen(false); }}
+                style={{ padding: "10px 14px 10px 11px", borderBottom: "1px solid var(--divider)", borderLeft: leftBorder, cursor: "pointer", background: rowBg }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 11, color: "#2a9d8f", fontWeight: 700 }}>#{p.rank}</span>
+                    {isNew && (
+                      <span style={{ fontSize: 9, color: "#0a3d2c", background: "#2a9d8f", padding: "1px 6px", borderRadius: 6, letterSpacing: "0.1em", fontWeight: 800 }}>NOUVEAU</span>
+                    )}
+                  </span>
+                  <span style={{ fontSize: 11, color: "var(--fg-secondary)", fontFamily: "Georgia, serif" }}>{fmt(p.price)}</span>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--fg-primary)", marginTop: 2 }}>
+                  {p.resort_name && p.resort_name !== "Unknown Resort" ? p.resort_name : p.address.split(",")[0]}
+                </div>
+                <div style={{ fontSize: 10, color: "var(--fg-dim)", marginTop: 1 }}>
+                  {p.bedrooms}BR · {p.property_type} · Score {(p.investment_score || 0).toFixed(1)}
+                </div>
               </div>
-              <div style={{ fontSize: 12, color: "var(--fg-primary)", marginTop: 2 }}>
-                {p.resort_name && p.resort_name !== "Unknown Resort" ? p.resort_name : p.address.split(",")[0]}
-              </div>
-              <div style={{ fontSize: 10, color: "var(--fg-dim)", marginTop: 1 }}>
-                {p.bedrooms}BR · {p.property_type} · Score {(p.investment_score || 0).toFixed(1)}
-                {p.detail_is_new && <span style={{ color: "#ffd166", marginLeft: 6 }}>✨ NEW</span>}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -464,11 +543,21 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
-    fetch(SCORED_PROPERTIES_URL)
+    fetch(SCORED_PROPERTIES_URL, { cache: "no-store" })
       .then(r => r.ok ? r.json() : Promise.reject("HTTP " + r.status))
       .then(data => {
         setProperties(data.properties || []);
-        setMeta({ generated_at: data.generated_at, total_api_calls: data.total_api_calls, local_mode: data.local_mode, new_window: data.new_badge_window_days });
+        setMeta({
+          generated_at: data.generated_at,
+          total_api_calls: data.total_api_calls,
+          local_mode: data.local_mode,
+          new_window: data.new_badge_window_days,
+          has_baseline: data.has_baseline,
+          previous_run_at: data.previous_run_at,
+          new_this_run_count: data.new_this_run_count || 0,
+          dropped: data.dropped || [],
+          dropped_count: data.dropped_count || 0,
+        });
         // Clamp selectedIdx to available range
         if (selectedIdx >= (data.properties || []).length) setSelectedIdx(0);
       })
@@ -584,6 +673,9 @@ export default function App() {
             Exécute d'abord <code style={{ background: "var(--bg-soft)", padding: "1px 6px", borderRadius: 3, color: "var(--fg-secondary)" }}>python3 src/property_finder.py</code> pour générer <code style={{ background: "var(--bg-soft)", padding: "1px 6px", borderRadius: 3, color: "var(--fg-secondary)" }}>cache/scored_properties.json</code>
           </div>
         </div>
+      )}
+      {properties.length > 0 && meta && (
+        <RunDeltaBanner meta={meta} properties={properties} onSelect={setSelectedIdx} />
       )}
       {properties.length > 0 && (
         <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
