@@ -101,7 +101,7 @@
     <!-- React 18 + Babel Standalone from CDN -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
 </head>
 <body>
     <div id="root"><div id="loading">Chargement de React…</div></div>
@@ -120,9 +120,14 @@
                 // Replace `export default function App()` with a plain function that we then render.
                 transformed = transformed.replace(/^export\s+default\s+function\s+App\s*\(/m, "function App(");
 
-                // Compile JSX via Babel Standalone
+                // Compile JSX via Babel Standalone.
+                // Force the *classic* runtime: newer @babel/preset-react defaults
+                // to "automatic", which injects `import { jsx } from "react/jsx-runtime"`
+                // into the output — and that import survives into new Function() below,
+                // throwing "Cannot use import statement outside a module". Classic
+                // emits React.createElement() against the global React instead.
                 const { code } = Babel.transform(transformed, {
-                    presets: ["react"],
+                    presets: [["react", { runtime: "classic" }]],
                     filename: "property_finance.jsx"
                 });
 
